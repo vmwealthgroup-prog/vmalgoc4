@@ -1,0 +1,9 @@
+[Unit]
+Description=VM Algo watchdog (alerts if the API or worker goes quiet)
+
+[Service]
+Type=oneshot
+User=vmalgo
+WorkingDirectory=/opt/vmalgo/backend
+EnvironmentFile=/etc/vmalgo/vmalgo.env
+ExecStart=/opt/vmalgo/.venv/bin/python -m app.watchdog --url http://127.0.0.1:8000 --state /var/tmp/vmalgo-watchdog.json

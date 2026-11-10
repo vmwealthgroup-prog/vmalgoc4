@@ -1,0 +1,19 @@
+# Price feed + automated strategy runner. Run exactly ONE instance.
+[Unit]
+Description=VM Algo worker (feed + strategy runner)
+After=vmalgo-api.service
+Requires=vmalgo-api.service
+
+[Service]
+User=vmalgo
+WorkingDirectory=/opt/vmalgo/backend
+EnvironmentFile=/etc/vmalgo/vmalgo.env
+ExecStart=/opt/vmalgo/.venv/bin/python -m app.worker
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

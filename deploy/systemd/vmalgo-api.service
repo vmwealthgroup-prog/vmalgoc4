@@ -1,0 +1,23 @@
+# For hosting WITHOUT Docker. Copy to /etc/systemd/system/, put settings in /etc/vmalgo/vmalgo.env (mode 600), then:
+#   sudo systemctl daemon-reload && sudo systemctl enable --now vmalgo-api vmalgo-worker vmalgo-watchdog.timer
+# Needs PostgreSQL and Redis installed, a venv at /opt/vmalgo/.venv, and `alembic upgrade head` run once per release.
+[Unit]
+Description=VM Algo API
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target
+
+[Service]
+User=vmalgo
+WorkingDirectory=/opt/vmalgo/backend
+EnvironmentFile=/etc/vmalgo/vmalgo.env
+Environment=FEED_IN_API=false
+ExecStartPre=/opt/vmalgo/.venv/bin/alembic upgrade head
+ExecStart=/opt/vmalgo/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --proxy-headers --no-access-log
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

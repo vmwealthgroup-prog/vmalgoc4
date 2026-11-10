@@ -1,0 +1,44 @@
+[
+ {
+  "name": "EMA crossover",
+  "key": "ema_crossover",
+  "style": "Trend",
+  "segment": "Equity",
+  "desc": "Hold long while the fast EMA is above the slow EMA. Simple and slow to react in sideways markets."
+ },
+ {
+  "name": "RSI mean reversion",
+  "key": "rsi_mean_reversion",
+  "style": "Mean reversion",
+  "segment": "Equity",
+  "desc": "Buy when RSI drops below a floor and exit when it recovers. Struggles in strong downtrends."
+ },
+ {
+  "name": "Opening range breakout",
+  "key": "opening_range_breakout",
+  "style": "Trend",
+  "segment": "Intraday",
+  "desc": "Trade the first break of the opening range and close at day end. Needs intraday data."
+ },
+ {
+  "name": "Band-rebalanced basket",
+  "key": "sizing.rebalance_trades",
+  "style": "Portfolio",
+  "segment": "Multi-asset",
+  "desc": "Hold target weights across ETFs, gold and crypto and trade only when an asset drifts past a band. Far fewer trades than calendar rebalancing."
+ },
+ {
+  "name": "ATR risk sizing",
+  "key": "sizing.atr_qty",
+  "style": "Risk",
+  "segment": "Any",
+  "desc": "Size each trade so a 2-ATR stop loses a fixed small percent of equity. Works with any signal."
+ },
+ {
+  "name": "Pre-trade risk gate",
+  "key": "risk/risk_gate.py",
+  "style": "Risk",
+  "segment": "Any",
+  "desc": "Blocks orders over size, position, daily-loss or daily-count limits, outside hours, or when a KILL file exists."
+ }
+]

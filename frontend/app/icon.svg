@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="7680" height="7680">
+  <defs>
+    <!-- Dark navy to royal blue gradient for the VM lettering -->
+    <linearGradient id="vmGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0b132b" />
+      <stop offset="45%" stop-color="#142868" />
+      <stop offset="100%" stop-color="#1d4ed8" />
+    </linearGradient>
+
+    <!-- Charcoal-slate gradient for the diamond border -->
+    <linearGradient id="frameGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#475569" />
+      <stop offset="100%" stop-color="#1e293b" />
+    </linearGradient>
+  </defs>
+
+  <!-- White Background -->
+  <rect width="1000" height="1000" fill="#ffffff" />
+
+  <!-- Diamond Frame -->
+  <polygon points="500,80 920,500 500,920 80,500" fill="#ffffff" stroke="url(#frameGrad)" stroke-width="34" stroke-linejoin="miter" />
+
+  <!-- VM Monogram -->
+  <text x="500" y="572" text-anchor="middle" font-family="Georgia, &#39;Times New Roman&#39;, serif" font-weight="bold" font-size="255" letter-spacing="-6" fill="url(#vmGrad)">VM</text>
+</svg>
