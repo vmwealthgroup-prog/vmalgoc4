@@ -16,7 +16,11 @@ def _data(response: Any, stage: str) -> dict:
     if not isinstance(response, dict):
         raise KotakNeoAuthError(f"Kotak Neo {stage} returned an invalid response.")
     data = response.get("data")
-    if not isinstance(data, dict) or str(data.get("status", "")).lower() != "success":
+    status = str(data.get("status", "")).lower() if isinstance(data, dict) else ""
+    # SDK/API releases may omit the optional status field while still returning
+    # the documented session token pair. Treat that as success only when the
+    # caller can subsequently validate the required token and SID.
+    if not isinstance(data, dict) or (status and status != "success"):
         # Do not return raw broker response; it may contain session/account data.
         error = response.get("error")
         message = "Authentication was not accepted."
