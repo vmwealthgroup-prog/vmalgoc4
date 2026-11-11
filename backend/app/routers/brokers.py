@@ -185,8 +185,21 @@ def add_crypto(b: CryptoIn, u: User = Depends(current_user), db: Session = Depen
 class KotakNeoAccountIn(BaseModel):
     label: str = Field(min_length=1, max_length=80)
     consumer_key: str = Field(min_length=12, max_length=300)
-    mobile_number: str = Field(min_length=10, max_length=16, pattern=r"^\\+?[0-9]{10,15}$")
+    mobile_number: str = Field(min_length=10, max_length=16, pattern=r"^\+?[0-9]{10,15}$")
     ucc: str = Field(min_length=2, max_length=40)
+
+    @field_validator("mobile_number")
+    @classmethod
+    def normalize_mobile_number(cls, value: str) -> str:
+        compact = re.sub(r"[^0-9+]", "", value.strip())
+        digits = compact.lstrip("+")
+        if len(digits) == 10:
+            return "+91" + digits
+        if len(digits) == 12 and digits.startswith("91"):
+            return "+" + digits
+        if compact.startswith("+") and 10 <= len(digits) <= 15:
+            return "+" + digits
+        raise ValueError("Enter a valid mobile number with country code, e.g. +919876543210")
 
 
 def _kotak_neo(db, u, aid):
