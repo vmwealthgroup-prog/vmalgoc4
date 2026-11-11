@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from ..brokers import kite, kotak_neo_auth
+from ..brokers import kite, kotak_neo_auth, kotak_neo_data
 from ..brokers.base import BrokerError
 from ..brokers.factory import SUPPORTED_BROKERS, ensure_paper_account, get_broker
 from ..config import get_settings
@@ -277,3 +277,16 @@ def kotak_neo_status(aid: int, u: User = Depends(current_user), db: Session = De
         "stage": "connected" if connected else ("view_session" if creds.get("view_token") else "not_logged_in"),
         "live_enabled": False,
     }
+
+
+
+@router.get("/accounts/{aid}/kotak-neo/snapshot")
+def kotak_neo_snapshot(aid: int, u: User = Depends(current_user), db: Session = Depends(get_db)):
+    account, creds = _kotak_neo(db, u, aid)
+    today = datetime.now(ZoneInfo("Asia/Kolkata")).date().isoformat()
+    if creds.get("token_date") != today or not creds.get("trade_token"):
+        raise HTTPException(401, "Kotak Neo session expired. Complete TOTP and MPIN login again.")
+    try:
+        return kotak_neo_data.account_snapshot(creds)
+    except kotak_neo_data.KotakNeoDataError as exc:
+        raise HTTPException(502, str(exc))
