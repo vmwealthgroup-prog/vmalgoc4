@@ -1,73 +1,72 @@
-"""Minimal, server-side Kotak Neo authentication calls.
+"""Kotak Neo authentication wrapper around the official kotakneoapi SDK.
 
-Only the Consumer Key and returned session material are persisted, encrypted by
-the router. TOTP and MPIN are request-only values and are never logged/stored.
+TOTP and MPIN are transient request values. Only session fields are returned
+to the router for encrypted persistence.
 """
-from urllib.parse import urlparse
-import httpx
+from typing import Any
 
-LOGIN_BASE = "https://mis.kotaksecurities.com"
-NEO_FIN_KEY = "neotradeapi"
-TIMEOUT = httpx.Timeout(12.0, connect=5.0)
+from neo_api_client import NeoAPI
 
 
 class KotakNeoAuthError(Exception):
     pass
 
 
-def _post(path: str, headers: dict, payload: dict) -> dict:
-    try:
-        response = httpx.post(
-            f"{LOGIN_BASE}{path}",
-            headers={**headers, "Content-Type": "application/json"},
-            json=payload,
-            timeout=TIMEOUT,
-        )
-        response.raise_for_status()
-        body = response.json()
-    except httpx.TimeoutException as exc:
-        raise KotakNeoAuthError("Kotak Neo authentication timed out. Retry with a fresh TOTP.") from exc
-    except httpx.HTTPStatusError as exc:
-        # Do not forward upstream body: it can contain account/session details.
-        raise KotakNeoAuthError(f"Kotak Neo rejected the authentication request (HTTP {exc.response.status_code}).") from exc
-    except (httpx.HTTPError, ValueError) as exc:
-        raise KotakNeoAuthError("Could not read a valid response from Kotak Neo.") from exc
-
-    data = body.get("data") if isinstance(body, dict) else None
+def _data(response: Any, stage: str) -> dict:
+    if not isinstance(response, dict):
+        raise KotakNeoAuthError(f"Kotak Neo {stage} returned an invalid response.")
+    data = response.get("data")
     if not isinstance(data, dict) or str(data.get("status", "")).lower() != "success":
-        message = body.get("message") if isinstance(body, dict) else None
-        safe_message = str(message or "Authentication was not accepted.")[:160]
-        raise KotakNeoAuthError(safe_message)
+        # Do not return raw broker response; it may contain session/account data.
+        error = response.get("error")
+        message = "Authentication was not accepted."
+        if isinstance(error, list) and error and isinstance(error[0], dict):
+            message = str(error[0].get("message") or message)
+        elif isinstance(response.get("message"), str):
+            message = response["message"]
+        raise KotakNeoAuthError(message[:160])
     return data
 
 
 def totp_login(consumer_key: str, mobile_number: str, ucc: str, totp: str) -> dict:
-    data = _post(
-        "/login/1.0/tradeApiLogin",
-        {"Authorization": consumer_key, "neo-fin-key": NEO_FIN_KEY},
-        {"mobileNumber": mobile_number, "ucc": ucc, "totp": totp},
-    )
+    try:
+        client = NeoAPI(consumer_key=consumer_key, environment="prod")
+        data = _data(
+            client.totp_login(mobile_number=mobile_number, ucc=ucc, totp=totp),
+            "TOTP login",
+        )
+    except KotakNeoAuthError:
+        raise
+    except Exception as exc:
+        raise KotakNeoAuthError("Kotak Neo TOTP login failed. Check the credentials and retry.") from exc
     token, sid = data.get("token"), data.get("sid")
     if not token or not sid:
-        raise KotakNeoAuthError("Kotak Neo response did not contain the temporary view session.")
+        raise KotakNeoAuthError("Kotak Neo did not return a temporary view session.")
     return {"view_token": token, "view_sid": sid}
 
 
 def mpin_validate(consumer_key: str, view_token: str, view_sid: str, mpin: str) -> dict:
-    data = _post(
-        "/login/1.0/tradeApiValidate",
-        {
-            "Authorization": consumer_key,
-            "neo-fin-key": NEO_FIN_KEY,
-            "sid": view_sid,
-            "Auth": view_token,
-        },
-        {"mpin": mpin},
-    )
+    try:
+        client = NeoAPI(consumer_key=consumer_key, environment="prod")
+        client.configuration.view_token = view_token
+        client.configuration.sid = view_sid
+        data = _data(client.totp_validate(mpin=mpin), "MPIN validation")
+    except KotakNeoAuthError:
+        raise
+    except Exception as exc:
+        raise KotakNeoAuthError("Kotak Neo MPIN validation failed. Retry authentication.") from exc
     token, sid, base_url = data.get("token"), data.get("sid"), data.get("baseUrl")
+    from urllib.parse import urlparse
     parsed = urlparse(str(base_url or ""))
     if not token or not sid or parsed.scheme != "https" or not (
         parsed.hostname == "kotaksecurities.com" or (parsed.hostname or "").endswith(".kotaksecurities.com")
     ):
-        raise KotakNeoAuthError("Kotak Neo response did not contain a valid trading session.")
-    return {"trade_token": token, "trade_sid": sid, "base_url": base_url}
+        raise KotakNeoAuthError("Kotak Neo did not return a valid trading session.")
+    return {
+        "trade_token": token,
+        "trade_sid": sid,
+        "trade_rid": data.get("rid"),
+        "base_url": base_url,
+        "data_center": data.get("dataCenter"),
+        "ucc": data.get("ucc"),
+    }
