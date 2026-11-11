@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from ..brokers import kite
+from ..brokers import kite, kotak_neo_auth
 from ..brokers.base import BrokerError
 from ..brokers.factory import SUPPORTED_BROKERS, ensure_paper_account, get_broker
 from ..config import get_settings
@@ -26,6 +26,14 @@ def _out(a: BrokerAccount):
     if a.kind == "kite":
         try: d["token_ok"] = kite.token_ok(json.loads(decrypt(a.api_key_enc)))     # Zerodha needs a fresh login every trading day
         except Exception: d["token_ok"] = False
+    if a.kind == "kotak_neo":
+        try:
+            creds = json.loads(decrypt(a.api_key_enc))
+            d["token_ok"] = bool(creds.get("trade_token") and creds.get("trade_sid") and creds.get("base_url"))
+            d["auth_stage"] = "connected" if d["token_ok"] else ("view_session" if creds.get("view_token") else "not_logged_in")
+        except Exception:
+            d["token_ok"] = False
+            d["auth_stage"] = "credential_error"
     return d
 
 
@@ -167,3 +175,101 @@ def add_crypto(b: CryptoIn, u: User = Depends(current_user), db: Session = Depen
         except Exception: raise HTTPException(422, "This exchange has no test network in ccxt. Untick test mode, or pick an exchange that has one (for example binance, bybit, okx).")
     a = BrokerAccount(user_id=u.id, kind="ccxt", label=b.label, broker_name=b.exchange, host="", api_key_enc=encrypt(json.dumps(b.model_dump())))
     db.add(a); db.commit(); return _out(a)
+
+
+# ---------------- Kotak Neo direct API (TOTP -> MPIN). MPIN/TOTP are request-only.
+class KotakNeoAccountIn(BaseModel):
+    label: str = Field(min_length=1, max_length=80)
+    consumer_key: str = Field(min_length=12, max_length=300)
+    mobile_number: str = Field(min_length=10, max_length=16, pattern=r"^\\+?[0-9]{10,15}$")
+    ucc: str = Field(min_length=2, max_length=40)
+
+
+def _kotak_neo(db, u, aid):
+    if not brokers_allowed(db):
+        raise HTTPException(403, "Broker connections need login on a hosted server. Turn on login in Settings.")
+    account = owned_account(db, u, aid)
+    if account.kind != "kotak_neo":
+        raise HTTPException(400, "This is not a Kotak Neo account")
+    try:
+        creds = json.loads(decrypt(account.api_key_enc))
+    except Exception:
+        raise HTTPException(500, "Could not read encrypted Kotak Neo credentials")
+    return account, creds
+
+
+@router.post("/accounts/kotak-neo", status_code=201)
+def add_kotak_neo(b: KotakNeoAccountIn, u: User = Depends(current_user), db: Session = Depends(get_db)):
+    if not brokers_allowed(db):
+        raise HTTPException(403, "Broker connections need login on a hosted server. Turn on login in Settings.")
+    creds = {
+        "consumer_key": b.consumer_key.strip(),
+        "mobile_number": b.mobile_number.strip(),
+        "ucc": b.ucc.strip().upper(),
+    }
+    account = BrokerAccount(
+        user_id=u.id, kind="kotak_neo", label=b.label,
+        broker_name="kotak_neo", host="https://mis.kotaksecurities.com",
+        api_key_enc=encrypt(json.dumps(creds)),
+        live_enabled=False,
+    )
+    db.add(account)
+    db.commit()
+    return _out(account)
+
+
+class KotakNeoTotpIn(BaseModel):
+    totp: str = Field(pattern=r"^[0-9]{6}$")
+
+
+@router.post("/accounts/{aid}/kotak-neo/totp")
+def kotak_neo_totp(aid: int, b: KotakNeoTotpIn, u: User = Depends(current_user), db: Session = Depends(get_db)):
+    account, creds = _kotak_neo(db, u, aid)
+    try:
+        view = kotak_neo_auth.totp_login(creds["consumer_key"], creds["mobile_number"], creds["ucc"], b.totp)
+    except kotak_neo_auth.KotakNeoAuthError as exc:
+        raise HTTPException(400, str(exc))
+    creds.pop("trade_token", None)
+    creds.pop("trade_sid", None)
+    creds.pop("base_url", None)
+    creds.update(view)
+    account.api_key_enc = encrypt(json.dumps(creds))
+    account.live_enabled = False
+    db.commit()
+    return {"ok": True, "stage": "view_session", "message": "TOTP accepted. Complete the second step with your MPIN."}
+
+
+class KotakNeoMpinIn(BaseModel):
+    mpin: str = Field(pattern=r"^[0-9]{6}$")
+
+
+@router.post("/accounts/{aid}/kotak-neo/mpin")
+def kotak_neo_mpin(aid: int, b: KotakNeoMpinIn, u: User = Depends(current_user), db: Session = Depends(get_db)):
+    account, creds = _kotak_neo(db, u, aid)
+    if not creds.get("view_token") or not creds.get("view_sid"):
+        raise HTTPException(409, "Complete TOTP login first.")
+    try:
+        session = kotak_neo_auth.mpin_validate(
+            creds["consumer_key"], creds["view_token"], creds["view_sid"], b.mpin
+        )
+    except kotak_neo_auth.KotakNeoAuthError as exc:
+        raise HTTPException(400, str(exc))
+    creds.pop("view_token", None)
+    creds.pop("view_sid", None)
+    creds.update(session)
+    account.api_key_enc = encrypt(json.dumps(creds))
+    account.live_enabled = False
+    db.commit()
+    return {"ok": True, "stage": "connected", "message": "Kotak Neo session established. Live order execution remains disabled."}
+
+
+@router.get("/accounts/{aid}/kotak-neo/status")
+def kotak_neo_status(aid: int, u: User = Depends(current_user), db: Session = Depends(get_db)):
+    account, creds = _kotak_neo(db, u, aid)
+    connected = bool(creds.get("trade_token") and creds.get("trade_sid") and creds.get("base_url"))
+    return {
+        "id": account.id,
+        "connected": connected,
+        "stage": "connected" if connected else ("view_session" if creds.get("view_token") else "not_logged_in"),
+        "live_enabled": False,
+    }
