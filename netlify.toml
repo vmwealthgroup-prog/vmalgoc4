@@ -1,0 +1,10 @@
+# Netlify builds and serves only the Next.js web app in /frontend.
+# The Python API (FastAPI) and worker cannot run on Netlify; host them elsewhere and set
+# API_INTERNAL_URL (and NEXTAUTH_SECRET) in the Netlify environment, then redeploy.
+[build]
+  base = "frontend"
+  command = "npm ci --include=dev && npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "20"
