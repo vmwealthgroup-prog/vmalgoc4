@@ -185,7 +185,7 @@ def add_crypto(b: CryptoIn, u: User = Depends(current_user), db: Session = Depen
 class KotakNeoAccountIn(BaseModel):
     label: str = Field(min_length=1, max_length=80)
     consumer_key: str = Field(min_length=12, max_length=300)
-    mobile_number: str = Field(min_length=10, max_length=16, pattern=r"^\+?[0-9]{10,15}$")
+    mobile_number: str = Field(min_length=10, max_length=20)
     ucc: str = Field(min_length=2, max_length=40)
 
     @field_validator("mobile_number")
