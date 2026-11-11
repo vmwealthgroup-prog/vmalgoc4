@@ -102,6 +102,7 @@ def live(aid: int, b: Live, u: User = Depends(current_user), db: Session = Depen
     a = owned_account(db, u, aid)
     if b.enabled and not live_allowed(db): raise HTTPException(403, "Live trading needs login. Turn on login in Settings first.")
     if a.kind == "paper": raise HTTPException(400, "Paper accounts are always paper")
+    if a.kind == "kotak_neo": raise HTTPException(403, "Kotak Neo live execution is not enabled in this integration stage.")
     if a.kind == "ccxt" and b.enabled and not json.loads(decrypt(a.api_key_enc)).get("trade"):
         raise HTTPException(400, "This crypto account is read-only. Add it again with trading enabled to trade.")
     if b.enabled and not get_settings().live_trading_enabled:
