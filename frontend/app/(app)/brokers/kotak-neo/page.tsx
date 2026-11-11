@@ -19,6 +19,11 @@ export default function KotakNeoPage() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ kind: "ok" | "error" | "warn"; text: string } | null>(null);
   const [snapshot, setSnapshot] = useState<Record<string, { ok: boolean; data?: unknown; error?: string }> | null>(null);
+  const [exchangeSegment, setExchangeSegment] = useState("nse_cm");
+  const [symbol, setSymbol] = useState("RELIANCE");
+  const [scripResult, setScripResult] = useState<unknown>(null);
+  const [instrumentToken, setInstrumentToken] = useState("");
+  const [quoteResult, setQuoteResult] = useState<unknown>(null);
   const neoAccounts = (accounts.data ?? []).filter((a) => a.kind === "kotak_neo");
   const activeId = selected ?? neoAccounts[0]?.id ?? null;
 
@@ -60,6 +65,33 @@ export default function KotakNeoPage() {
       setSnapshot(result);
       const failed = Object.values(result).filter((v) => !v.ok).length;
       setNotice({ kind: failed ? "warn" : "ok", text: failed ? `Account data loaded with ${failed} section(s) unavailable.` : "Read-only account data refreshed successfully." });
+    } catch (e) { setNotice({ kind: "error", text: (e as Error).message }); }
+    finally { setBusy(false); }
+  }
+
+  async function searchScrip() {
+    if (!activeId) return;
+    setBusy(true); setNotice(null);
+    try {
+      const result = await call<unknown>(`/api/brokers/accounts/${activeId}/kotak-neo/scrip-search`, {
+        method: "POST", body: JSON.stringify({ exchange_segment: exchangeSegment, symbol }),
+      });
+      setScripResult(result);
+      setNotice({ kind: "ok", text: "Scrip search completed. Verify the returned instrument token and exchange before requesting quotes." });
+    } catch (e) { setNotice({ kind: "error", text: (e as Error).message }); }
+    finally { setBusy(false); }
+  }
+
+  async function fetchQuote() {
+    if (!activeId || !instrumentToken.trim()) return;
+    setBusy(true); setNotice(null);
+    try {
+      const result = await call<unknown>(`/api/brokers/accounts/${activeId}/kotak-neo/quotes`, {
+        method: "POST",
+        body: JSON.stringify({ instruments: [{ instrument_token: instrumentToken.trim(), exchange_segment: exchangeSegment }], quote_type: "all" }),
+      });
+      setQuoteResult(result);
+      setNotice({ kind: "ok", text: "Market quote request completed." });
     } catch (e) { setNotice({ kind: "error", text: (e as Error).message }); }
     finally { setBusy(false); }
   }
@@ -107,6 +139,20 @@ export default function KotakNeoPage() {
           <div className="flex items-end"><Button disabled={busy || mpin.length !== 6} onClick={() => authenticate("mpin")}>Validate MPIN</Button></div>
         </div>
       </Card>}
+      <Card title="Market quotes · NSE / BSE / F&O / MCX">
+        <p className="mb-3 text-sm text-ink2">Search the broker scrip master, verify its instrument token, then request a read-only quote. Up to 50 instruments per request.</p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Field label="Exchange segment"><select className="w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm" value={exchangeSegment} onChange={(e) => setExchangeSegment(e.target.value)}><option value="nse_cm">NSE Cash</option><option value="bse_cm">BSE Cash</option><option value="nse_fo">NSE F&O</option><option value="bse_fo">BSE F&O</option><option value="mcx_fo">MCX F&O</option><option value="nse_com">NSE Commodity</option></select></Field>
+          <Field label="Trading symbol"><Input value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase())} placeholder="RELIANCE" maxLength={40} /></Field>
+          <div className="flex items-end"><Button disabled={busy || !activeId || !symbol.trim()} onClick={searchScrip}>Search scrip</Button></div>
+        </div>
+        {scripResult !== null && <div className="mt-3 rounded-lg border border-line p-3"><p className="mb-2 text-sm font-semibold">Scrip search result</p><pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all text-xs text-ink2">{JSON.stringify(scripResult, null, 2)}</pre></div>}
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <Field label="Verified instrument token"><Input value={instrumentToken} onChange={(e) => setInstrumentToken(e.target.value.replace(/\\D/g, ""))} placeholder="Enter token from search result" maxLength={24} /></Field>
+          <div className="flex items-end"><Button disabled={busy || !activeId || !instrumentToken.trim()} onClick={fetchQuote}>Fetch live quote</Button></div>
+        </div>
+        {quoteResult !== null && <div className="mt-3 rounded-lg border border-line p-3"><p className="mb-2 text-sm font-semibold">Quote response</p><pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all text-xs text-ink2">{JSON.stringify(quoteResult, null, 2)}</pre></div>}
+      </Card>
       <Card title="Read-only account data">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-ink2">Fetch funds, holdings, positions, order book and trade book from Kotak Neo.</p>
