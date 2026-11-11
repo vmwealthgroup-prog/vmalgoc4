@@ -18,6 +18,7 @@ export default function KotakNeoPage() {
   const [mpin, setMpin] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ kind: "ok" | "error" | "warn"; text: string } | null>(null);
+  const [snapshot, setSnapshot] = useState<Record<string, { ok: boolean; data?: unknown; error?: string }> | null>(null);
   const neoAccounts = (accounts.data ?? []).filter((a) => a.kind === "kotak_neo");
   const activeId = selected ?? neoAccounts[0]?.id ?? null;
 
@@ -45,6 +46,20 @@ export default function KotakNeoPage() {
       setTotp(""); setMpin("");
       await accounts.reload();
       setNotice({ kind: "ok", text: step === "totp" ? "TOTP accepted. Enter MPIN to complete authentication." : "Kotak Neo session established. Live trading remains disabled." });
+    } catch (e) { setNotice({ kind: "error", text: (e as Error).message }); }
+    finally { setBusy(false); }
+  }
+
+  async function loadSnapshot() {
+    if (!activeId) return;
+    setBusy(true); setNotice(null);
+    try {
+      const result = await call<Record<string, { ok: boolean; data?: unknown; error?: string }>>(
+        `/api/brokers/accounts/${activeId}/kotak-neo/snapshot`,
+      );
+      setSnapshot(result);
+      const failed = Object.values(result).filter((v) => !v.ok).length;
+      setNotice({ kind: failed ? "warn" : "ok", text: failed ? `Account data loaded with ${failed} section(s) unavailable.` : "Read-only account data refreshed successfully." });
     } catch (e) { setNotice({ kind: "error", text: (e as Error).message }); }
     finally { setBusy(false); }
   }
@@ -92,11 +107,19 @@ export default function KotakNeoPage() {
           <div className="flex items-end"><Button disabled={busy || mpin.length !== 6} onClick={() => authenticate("mpin")}>Validate MPIN</Button></div>
         </div>
       </Card>}
-      <Card title="Trading and data status">
-        <div className="grid gap-3 sm:grid-cols-3">
-          {["Funds & margins", "Positions & holdings", "Order & trade book", "Market quotes", "Session health", "API activity log"].map((item) => <div key={item} className="rounded-lg border border-line p-3"><p className="text-sm font-medium">{item}</p><p className="mt-1 text-xs text-ink2">Next integration stage</p></div>)}
+      <Card title="Read-only account data">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-ink2">Fetch funds, holdings, positions, order book and trade book from Kotak Neo.</p>
+          <Button disabled={busy || !activeId || !neoAccounts.find((a) => a.id === activeId)?.token_ok} onClick={loadSnapshot}>Refresh account data</Button>
         </div>
-        <p className="mt-4 text-sm font-semibold text-loss">Live order placement is blocked server-side. This stage only establishes the authenticated session.</p>
+        {snapshot && <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          {Object.entries(snapshot).map(([key, section]) => <div key={key} className="min-w-0 rounded-lg border border-line p-3">
+            <div className="flex items-center justify-between gap-2"><p className="font-semibold capitalize">{key === "funds" ? "Funds & margins" : key}</p><span className={section.ok ? "text-xs text-profit" : "text-xs text-loss"}>{section.ok ? "Loaded" : "Unavailable"}</span></div>
+            {section.ok ? <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-all text-xs text-ink2">{JSON.stringify(section.data, null, 2)}</pre> : <p className="mt-2 text-xs text-loss">{section.error}</p>}
+          </div>)}
+        </div>}
+        {!snapshot && <p className="mt-3 text-xs text-ink2">No account data fetched in this session yet.</p>}
+        <p className="mt-4 text-sm font-semibold text-loss">Read-only mode: live order placement, modification and cancellation remain blocked.</p>
       </Card>
     </div>
   );
