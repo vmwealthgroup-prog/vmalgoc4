@@ -290,3 +290,41 @@ def kotak_neo_snapshot(aid: int, u: User = Depends(current_user), db: Session = 
         return kotak_neo_data.account_snapshot(creds)
     except kotak_neo_data.KotakNeoDataError as exc:
         raise HTTPException(502, str(exc))
+
+
+
+class KotakNeoScripSearchIn(BaseModel):
+    exchange_segment: str = Field(min_length=3, max_length=16)
+    symbol: str = Field(min_length=1, max_length=40)
+
+
+class KotakNeoInstrumentIn(BaseModel):
+    instrument_token: str = Field(min_length=1, max_length=24)
+    exchange_segment: str = Field(min_length=3, max_length=16)
+
+
+class KotakNeoQuotesIn(BaseModel):
+    instruments: list[KotakNeoInstrumentIn] = Field(min_length=1, max_length=50)
+    quote_type: str = Field(default="all", max_length=20)
+
+
+@router.post("/accounts/{aid}/kotak-neo/scrip-search")
+def kotak_neo_scrip_search(aid: int, b: KotakNeoScripSearchIn, u: User = Depends(current_user), db: Session = Depends(get_db)):
+    _, creds = _kotak_neo(db, u, aid)
+    try:
+        return kotak_neo_data.search_scrip(creds, b.exchange_segment, b.symbol)
+    except kotak_neo_data.KotakNeoDataError as exc:
+        raise HTTPException(422, str(exc))
+
+
+@router.post("/accounts/{aid}/kotak-neo/quotes")
+def kotak_neo_quotes(aid: int, b: KotakNeoQuotesIn, u: User = Depends(current_user), db: Session = Depends(get_db)):
+    _, creds = _kotak_neo(db, u, aid)
+    try:
+        return kotak_neo_data.quotes(
+            creds,
+            [item.model_dump() for item in b.instruments],
+            b.quote_type,
+        )
+    except kotak_neo_data.KotakNeoDataError as exc:
+        raise HTTPException(422, str(exc))
