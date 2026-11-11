@@ -33,6 +33,14 @@ def _safe_response(result: Any, operation: str):
     if not isinstance(result, (dict, list)):
         raise KotakNeoDataError(f"Kotak Neo {operation} returned an unexpected response.")
     if isinstance(result, dict) and any(k in result for k in ("Error", "Error Message", "error")):
+        # SDK error payloads sometimes include a safe, human-readable message
+        # alongside an exception object. Never stringify the exception object.
+        detail = result.get("message") or result.get("Error Message")
+        errors = result.get("error")
+        if not detail and isinstance(errors, list) and errors and isinstance(errors[0], dict):
+            detail = errors[0].get("message")
+        if isinstance(detail, str) and detail.strip():
+            raise KotakNeoDataError(f"Kotak Neo {operation} failed: {detail.strip()[:120]}")
         raise KotakNeoDataError(f"Kotak Neo {operation} failed. Check inputs or retry.")
     return result
 

@@ -55,3 +55,12 @@ def test_authentication_rejects_unsuccessful_response(monkeypatch):
     monkeypatch.setattr(auth, "NeoAPI", lambda **kw: client)
     with pytest.raises(auth.KotakNeoAuthError, match="Invalid TOTP"):
         auth.totp_login("consumer-key", "+919999999999", "UCC1", "123456")
+
+
+
+def test_totp_login_accepts_successful_token_pair_without_optional_status(monkeypatch):
+    client = FakeClient()
+    client.login_result = {"data": {"token": "view-token", "sid": "view-sid"}}
+    monkeypatch.setattr(auth, "NeoAPI", lambda **kw: client)
+    result = auth.totp_login("consumer-key", "+919999999999", "UCC1", "123456")
+    assert result == {"view_token": "view-token", "view_sid": "view-sid"}

@@ -4,7 +4,8 @@ from zoneinfo import ZoneInfo
 from urllib.parse import urlparse
 import ccxt
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+import re
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from ..brokers import kite, kotak_neo_auth, kotak_neo_data
@@ -184,8 +185,21 @@ def add_crypto(b: CryptoIn, u: User = Depends(current_user), db: Session = Depen
 class KotakNeoAccountIn(BaseModel):
     label: str = Field(min_length=1, max_length=80)
     consumer_key: str = Field(min_length=12, max_length=300)
-    mobile_number: str = Field(min_length=10, max_length=16, pattern=r"^\\+?[0-9]{10,15}$")
+    mobile_number: str = Field(min_length=10, max_length=20)
     ucc: str = Field(min_length=2, max_length=40)
+
+    @field_validator("mobile_number")
+    @classmethod
+    def normalize_mobile_number(cls, value: str) -> str:
+        compact = re.sub(r"[^0-9+]", "", value.strip())
+        digits = compact.lstrip("+")
+        if len(digits) == 10:
+            return "+91" + digits
+        if len(digits) == 12 and digits.startswith("91"):
+            return "+" + digits
+        if compact.startswith("+") and 10 <= len(digits) <= 15:
+            return "+" + digits
+        raise ValueError("Enter a valid mobile number with country code, e.g. +919876543210")
 
 
 def _kotak_neo(db, u, aid):
@@ -198,6 +212,13 @@ def _kotak_neo(db, u, aid):
         creds = json.loads(decrypt(account.api_key_enc))
     except Exception:
         raise HTTPException(500, "Could not read encrypted Kotak Neo credentials")
+    # Normalize older saved 10-digit Indian numbers too; Kotak's SDK requires country code.
+    mobile = re.sub(r"[^0-9+]", "", str(creds.get("mobile_number", "")).strip())
+    digits = mobile.lstrip("+")
+    if len(digits) == 10:
+        creds["mobile_number"] = "+91" + digits
+    elif len(digits) == 12 and digits.startswith("91"):
+        creds["mobile_number"] = "+" + digits
     return account, creds
 
 
@@ -207,7 +228,7 @@ def add_kotak_neo(b: KotakNeoAccountIn, u: User = Depends(current_user), db: Ses
         raise HTTPException(403, "Broker connections need login on a hosted server. Turn on login in Settings.")
     creds = {
         "consumer_key": b.consumer_key.strip(),
-        "mobile_number": b.mobile_number.strip(),
+        "mobile_number": b.mobile_number,
         "ucc": b.ucc.strip().upper(),
     }
     account = BrokerAccount(
