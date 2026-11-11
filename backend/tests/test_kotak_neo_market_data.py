@@ -62,3 +62,18 @@ def test_scrip_search_rejects_unknown_segment():
         assert False, "expected validation error"
     except data.KotakNeoDataError as exc:
         assert "Unsupported exchange segment" in str(exc)
+
+
+
+def test_scrip_search_reports_safe_sdk_error_message(monkeypatch):
+    class ErrorClient:
+        def search_scrip(self, **kwargs):
+            return {"Error": RuntimeError("internal"), "message": "Exchange segment is not available"}
+
+    monkeypatch.setattr(data, "_client", lambda _: ErrorClient())
+    try:
+        data.search_scrip({"consumer_key": "key"}, "nse_cm", "RELIANCE")
+        assert False, "expected safe broker error"
+    except data.KotakNeoDataError as exc:
+        assert "Exchange segment is not available" in str(exc)
+        assert "internal" not in str(exc)
