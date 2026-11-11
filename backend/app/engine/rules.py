@@ -119,14 +119,117 @@ def positions(df: pd.DataFrame, spec: dict) -> pd.Series:
 
 
 TEMPLATES = [
-    {"key": "ema_cross", "name": "EMA 9/21 crossover", "spec": {
-        "entry": {"all": [{"left": {"ind": "ema", "period": 9}, "op": "crosses_above", "right": {"ind": "ema", "period": 21}}]},
-        "exit": {"all": [{"left": {"ind": "ema", "period": 9}, "op": "crosses_below", "right": {"ind": "ema", "period": 21}}]}}},
-    {"key": "rsi_reversion", "name": "RSI mean reversion", "spec": {
-        "entry": {"all": [{"left": {"ind": "rsi", "period": 14}, "op": "<", "right": {"value": 30}}]},
-        "exit": {"all": [{"left": {"ind": "rsi", "period": 14}, "op": ">", "right": {"value": 55}}]}}},
-    {"key": "donchian", "name": "20-bar breakout with stop", "spec": {
-        "entry": {"all": [{"left": {"ind": "close"}, "op": ">", "right": {"ind": "hh", "period": 20}}]},
-        "exit": {"all": [{"left": {"ind": "close"}, "op": "<", "right": {"ind": "ll", "period": 10}}]},
-        "risk": {"stop_pct": 2}}},
+    {
+        "key": "ema_cross", "name": "EMA 9/21 crossover", "category": "Trend", "origin": "Core systematic",
+        "description": "A simple moving-average crossover baseline. Waits for the fast EMA to cross the slow EMA.",
+        "research_note": "Baseline model; compare it against the more selective champion-inspired templates.",
+        "spec": {
+            "entry": {"all": [{"left": {"ind": "ema", "period": 9}, "op": "crosses_above", "right": {"ind": "ema", "period": 21}}]},
+            "exit": {"all": [{"left": {"ind": "ema", "period": 9}, "op": "crosses_below", "right": {"ind": "ema", "period": 21}}]}
+        }
+    },
+    {
+        "key": "rsi_reversion", "name": "RSI mean reversion", "category": "Mean reversion", "origin": "Quant research",
+        "description": "Looks for an oversold RSI recovery and exits as momentum normalises.",
+        "research_note": "Long-only template. Mean-reversion systems can struggle in persistent downtrends; test regime filters.",
+        "spec": {
+            "entry": {"all": [{"left": {"ind": "rsi", "period": 14}, "op": "<", "right": {"value": 30}}]},
+            "exit": {"all": [{"left": {"ind": "rsi", "period": 14}, "op": ">", "right": {"value": 55}}]}
+        }
+    },
+    {
+        "key": "donchian", "name": "20-bar breakout with stop", "category": "Breakout", "origin": "Trend following",
+        "description": "Enters when the close breaks the prior 20-bar high and exits below the prior 10-bar low.",
+        "research_note": "Prior-bar breakout levels avoid using the current candle in the breakout threshold.",
+        "spec": {
+            "entry": {"all": [{"left": {"ind": "close"}, "op": ">", "right": {"ind": "hh", "period": 20}}]},
+            "exit": {"all": [{"left": {"ind": "close"}, "op": "<", "right": {"ind": "ll", "period": 10}}]},
+            "risk": {"stop_pct": 2}
+        }
+    },
+    {
+        "key": "vm_momentum_pullback", "name": "VM Momentum Pullback", "category": "Swing momentum", "origin": "Inspired by Oliver Kell-style momentum principles",
+        "description": "Trend alignment plus a pullback toward EMA 20, with RSI strength confirmation.",
+        "research_note": "A rules-based research interpretation, not Oliver Kell's proprietary method. Volume confirmation is omitted until volume-average support is added to the rule engine.",
+        "spec": {
+            "symbol": "RELIANCE", "exchange": "NSE", "interval": "1d", "side": "long",
+            "entry": {"all": [
+                {"left": {"ind": "ema", "period": 20}, "op": ">", "right": {"ind": "ema", "period": 50}},
+                {"left": {"ind": "close"}, "op": ">", "right": {"ind": "ema", "period": 200}},
+                {"left": {"ind": "low"}, "op": "<=", "right": {"ind": "ema", "period": 20}},
+                {"left": {"ind": "close"}, "op": ">", "right": {"ind": "ema", "period": 20}},
+                {"left": {"ind": "rsi", "period": 14}, "op": ">=", "right": {"value": 55}},
+                {"left": {"ind": "rsi", "period": 14}, "op": "<=", "right": {"value": 70}}
+            ]},
+            "exit": {"any": [
+                {"left": {"ind": "close"}, "op": "<", "right": {"ind": "ema", "period": 20}},
+                {"left": {"ind": "ema", "period": 20}, "op": "crosses_below", "right": {"ind": "ema", "period": 50}}
+            ]},
+            "risk": {"qty": 1, "stop_pct": 2, "take_pct": 4}
+        }
+    },
+    {
+        "key": "vm_breakout_volume", "name": "VM Breakout", "category": "Breakout", "origin": "Systematic price breakout",
+        "description": "Prior 20-bar high breakout with medium- and long-term trend alignment.",
+        "research_note": "The current rule engine does not yet support volume-SMA operands; this version intentionally does not claim volume confirmation.",
+        "spec": {
+            "symbol": "RELIANCE", "exchange": "NSE", "interval": "15m", "side": "long",
+            "entry": {"all": [
+                {"left": {"ind": "close"}, "op": ">", "right": {"ind": "hh", "period": 20}},
+                {"left": {"ind": "ema", "period": 20}, "op": ">", "right": {"ind": "ema", "period": 50}},
+                {"left": {"ind": "close"}, "op": ">", "right": {"ind": "ema", "period": 200}}
+            ]},
+            "exit": {"any": [
+                {"left": {"ind": "close"}, "op": "<", "right": {"ind": "ema", "period": 20}},
+                {"left": {"ind": "close"}, "op": "<", "right": {"ind": "ll", "period": 10}}
+            ]},
+            "risk": {"qty": 1, "stop_pct": 2, "take_pct": 4}
+        }
+    },
+    {
+        "key": "vm_intraday_pullback", "name": "VM Intraday Pullback", "category": "Intraday", "origin": "Momentum pullback research",
+        "description": "Intraday trend filter with a pullback and bullish EMA reclaim trigger.",
+        "research_note": "Use liquid symbols and realistic intraday costs. VWAP is not currently an available rule-engine indicator, so it is not represented as a condition.",
+        "spec": {
+            "symbol": "RELIANCE", "exchange": "NSE", "interval": "5m", "side": "long",
+            "entry": {"all": [
+                {"left": {"ind": "ema", "period": 10}, "op": ">", "right": {"ind": "ema", "period": 20}},
+                {"left": {"ind": "low"}, "op": "<=", "right": {"ind": "ema", "period": 20}},
+                {"left": {"ind": "close"}, "op": "crosses_above", "right": {"ind": "ema", "period": 10}},
+                {"left": {"ind": "rsi", "period": 14}, "op": ">", "right": {"value": 50}}
+            ]},
+            "exit": {"all": [{"left": {"ind": "close"}, "op": "crosses_below", "right": {"ind": "ema", "period": 20}}]},
+            "risk": {"qty": 1, "stop_pct": 1, "take_pct": 2, "square_off": "15:15"}
+        }
+    },
+    {
+        "key": "vm_quant_recovery", "name": "VM Quant Recovery", "category": "Quant research", "origin": "Inspired by systematic quantitative research",
+        "description": "Oversold RSI recovery with a price-above-EMA-20 confirmation and predefined exits.",
+        "research_note": "A transparent rule-based prototype, not a statistical-arbitrage model. Validate across symbols and market regimes before use.",
+        "spec": {
+            "symbol": "RELIANCE", "exchange": "NSE", "interval": "1d", "side": "long",
+            "entry": {"all": [
+                {"left": {"ind": "rsi", "period": 14}, "op": "crosses_above", "right": {"value": 30}},
+                {"left": {"ind": "close"}, "op": ">", "right": {"ind": "ema", "period": 20}}
+            ]},
+            "exit": {"all": [{"left": {"ind": "rsi", "period": 14}, "op": ">", "right": {"value": 55}}]},
+            "risk": {"qty": 1, "stop_pct": 1.5, "take_pct": 3}
+        }
+    },
+    {
+        "key": "vm_trend_filter", "name": "VM Trend", "category": "Trend following", "origin": "Multi-timeframe trend principles",
+        "description": "Three-EMA trend stack with RSI confirmation; designed as a clean trend-following baseline.",
+        "research_note": "ADX and SuperTrend are not yet supported by this rule engine. This template uses supported EMA/RSI conditions instead of silently approximating them.",
+        "spec": {
+            "symbol": "RELIANCE", "exchange": "NSE", "interval": "1h", "side": "long",
+            "entry": {"all": [
+                {"left": {"ind": "ema", "period": 20}, "op": ">", "right": {"ind": "ema", "period": 50}},
+                {"left": {"ind": "ema", "period": 50}, "op": ">", "right": {"ind": "ema", "period": 200}},
+                {"left": {"ind": "close"}, "op": ">", "right": {"ind": "ema", "period": 20}},
+                {"left": {"ind": "rsi", "period": 14}, "op": ">", "right": {"value": 50}}
+            ]},
+            "exit": {"all": [{"left": {"ind": "ema", "period": 20}, "op": "crosses_below", "right": {"ind": "ema", "period": 50}}]},
+            "risk": {"qty": 1, "stop_pct": 2, "take_pct": 4}
+        }
+    }
 ]

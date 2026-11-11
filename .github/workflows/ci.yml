@@ -20,9 +20,16 @@ jobs:
       - name: Tests on PostgreSQL
         run: python -m pytest -q tests
         env: { TEST_DATABASE_URL: "postgresql+psycopg://vmalgo:vmalgo@localhost:5432/vmalgo_test" }
+      - name: Create an isolated database for migration validation
+        run: |
+          python - <<'PY'
+          import psycopg
+          with psycopg.connect("postgresql://vmalgo:vmalgo@localhost:5432/postgres", autocommit=True) as conn:
+              conn.execute("CREATE DATABASE vmalgo_migrations")
+          PY
       - name: Migrations apply cleanly and match the models
         run: alembic upgrade head && alembic check
-        env: { DATABASE_URL: "postgresql+psycopg://vmalgo:vmalgo@localhost:5432/vmalgo_test", ENV: development }
+        env: { DATABASE_URL: "postgresql+psycopg://vmalgo:vmalgo@localhost:5432/vmalgo_migrations", ENV: development }
   frontend:
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: frontend } }

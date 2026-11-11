@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useApi, useLoad } from "@/lib/api";
 import type { Account, Spec, Strategy } from "@/lib/types";
 import ConditionEditor from "@/components/StrategyBuilder";
@@ -14,15 +14,25 @@ const BLANK: Spec = {
 };
 
 export default function StrategyPage() {
-  const { id } = useParams<{ id: string }>(); const isNew = id === "new"; const router = useRouter();
+  const { id } = useParams<{ id: string }>(); const isNew = id === "new"; const router = useRouter(); const searchParams = useSearchParams();
+  const requestedTemplate = searchParams.get("template") ?? ""; const [appliedTemplate, setAppliedTemplate] = useState("");
   const { ready, call, config } = useApi();
-  const templates = useLoad<{ key: string; name: string; spec: Partial<Spec> }[]>("/api/strategies/templates");
+  const templates = useLoad<{ key: string; name: string; category?: string; description?: string; research_note?: string; spec: Partial<Spec> }[]>("/api/strategies/templates");
   const accounts = useLoad<Account[]>("/api/brokers/accounts");
   const [name, setName] = useState("My strategy"); const [spec, setSpec] = useState<Spec>(BLANK);
   const [saved, setSaved] = useState<Strategy | null>(null); const [msg, setMsg] = useState<{ k: "ok" | "error"; t: string } | null>(null); const [busy, setBusy] = useState(false);
   const [src, setSrc] = useState("auto"); const [bars, setBars] = useState(1000); const [cost, setCost] = useState(5);
 
   useEffect(() => { if (ready && !isNew) call<Strategy>(`/api/strategies/${id}`).then((s) => { setSaved(s); setName(s.name); setSpec(s.spec); }).catch((e) => setMsg({ k: "error", t: e.message })); }, [ready, id, isNew, call]);
+
+  useEffect(() => {
+    if (!isNew || !requestedTemplate || appliedTemplate === requestedTemplate || !templates.data) return;
+    const selected = templates.data.find((t) => t.key === requestedTemplate);
+    if (!selected) return;
+    setName(selected.name);
+    setSpec({ ...BLANK, ...selected.spec, risk: { ...BLANK.risk, ...(selected.spec.risk ?? {}) } } as Spec);
+    setAppliedTemplate(requestedTemplate);
+  }, [isNew, requestedTemplate, appliedTemplate, templates.data]);
 
   const up = (p: Partial<Spec>) => setSpec((s) => ({ ...s, ...p }));
   const risk = spec.risk ?? {}; const upRisk = (p: Record<string, number | string | undefined>) => up({ risk: { ...risk, ...p } });
