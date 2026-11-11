@@ -6,7 +6,7 @@ import { signOut, useSession } from "next-auth/react";
 import { useConfig } from "@/lib/config";
 import { Button, Notice } from "@/components/ui";
 
-const NAV = [["/dashboard", "Dashboard"], ["/strategies", "Strategies"], ["/backtests", "Backtests"], ["/scanner", "Scanner"], ["/ai", "AI Analyst"], ["/portfolio", "Portfolio"], ["/brokers", "Brokers"], ["/settings", "Settings"]];
+const NAV = [["/dashboard", "Dashboard"], ["/strategies", "Strategies"], ["/backtests", "Backtests"], ["/scanner", "Scanner"], ["/ai", "AI Analyst"], ["/portfolio", "Portfolio"], ["/brokers", "Brokers"], ["/brokers/kotak-neo", "Kotak Neo API"], ["/settings", "Settings"]];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const path = usePathname(); const router = useRouter();
