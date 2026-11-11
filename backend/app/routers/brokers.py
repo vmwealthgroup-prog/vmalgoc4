@@ -1,4 +1,6 @@
 import json
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from urllib.parse import urlparse
 import ccxt
 from fastapi import APIRouter, Depends, HTTPException
@@ -29,7 +31,7 @@ def _out(a: BrokerAccount):
     if a.kind == "kotak_neo":
         try:
             creds = json.loads(decrypt(a.api_key_enc))
-            d["token_ok"] = bool(creds.get("trade_token") and creds.get("trade_sid") and creds.get("base_url"))
+            d["token_ok"] = bool(creds.get("trade_token") and creds.get("trade_sid") and creds.get("base_url") and creds.get("token_date") == datetime.now(ZoneInfo("Asia/Kolkata")).date().isoformat())
             d["auth_stage"] = "connected" if d["token_ok"] else ("view_session" if creds.get("view_token") else "not_logged_in")
         except Exception:
             d["token_ok"] = False
@@ -258,6 +260,7 @@ def kotak_neo_mpin(aid: int, b: KotakNeoMpinIn, u: User = Depends(current_user),
     creds.pop("view_token", None)
     creds.pop("view_sid", None)
     creds.update(session)
+    creds["token_date"] = datetime.now(ZoneInfo("Asia/Kolkata")).date().isoformat()
     account.api_key_enc = encrypt(json.dumps(creds))
     account.live_enabled = False
     db.commit()
@@ -267,7 +270,7 @@ def kotak_neo_mpin(aid: int, b: KotakNeoMpinIn, u: User = Depends(current_user),
 @router.get("/accounts/{aid}/kotak-neo/status")
 def kotak_neo_status(aid: int, u: User = Depends(current_user), db: Session = Depends(get_db)):
     account, creds = _kotak_neo(db, u, aid)
-    connected = bool(creds.get("trade_token") and creds.get("trade_sid") and creds.get("base_url"))
+    connected = bool(creds.get("trade_token") and creds.get("trade_sid") and creds.get("base_url") and creds.get("token_date") == datetime.now(ZoneInfo("Asia/Kolkata")).date().isoformat())
     return {
         "id": account.id,
         "connected": connected,
