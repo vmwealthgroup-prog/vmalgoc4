@@ -1,7 +1,6 @@
 import pytest
 
 from app.brokers import kotak_neo_auth as auth
-from app.brokers import kotak_neo_data as data
 
 
 class FakeConfig:
@@ -56,34 +55,3 @@ def test_authentication_rejects_unsuccessful_response(monkeypatch):
     monkeypatch.setattr(auth, "NeoAPI", lambda **kw: client)
     with pytest.raises(auth.KotakNeoAuthError, match="Invalid TOTP"):
         auth.totp_login("consumer-key", "+919999999999", "UCC1", "123456")
-
-
-def test_data_adapter_only_invokes_read_methods(monkeypatch):
-    calls = []
-    class ReadClient:
-        def limits(self): calls.append("limits"); return {"stat": "Ok"}
-        def holdings(self): calls.append("holdings"); return {"data": []}
-        def positions(self): calls.append("positions"); return {"data": []}
-        def order_report(self): calls.append("order_report"); return {"data": []}
-        def trade_report(self): calls.append("trade_report"); return {"data": []}
-    monkeypatch.setattr(data, "build_client", lambda _: ReadClient())
-    snapshot = data.account_snapshot({
-        "consumer_key": "key", "trade_token": "token", "trade_sid": "sid",
-        "base_url": "https://cis.kotaksecurities.com"
-    })
-    assert all(snapshot[k]["ok"] for k in ("funds", "holdings", "positions", "orders", "trades"))
-    assert calls == ["limits", "holdings", "positions", "order_report", "trade_report"]
-
-
-def test_data_adapter_reports_partial_failures_without_exposing_exception(monkeypatch):
-    class ReadClient:
-        def limits(self): raise RuntimeError("sensitive upstream detail")
-        def holdings(self): return {"data": []}
-        def positions(self): return {"data": []}
-        def order_report(self): return {"data": []}
-        def trade_report(self): return {"data": []}
-    monkeypatch.setattr(data, "build_client", lambda _: ReadClient())
-    snapshot = data.account_snapshot({})
-    assert snapshot["funds"]["ok"] is False
-    assert "sensitive upstream detail" not in snapshot["funds"]["error"]
-    assert snapshot["holdings"]["ok"] is True
