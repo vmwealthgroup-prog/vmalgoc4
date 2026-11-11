@@ -1,98 +1,102 @@
 "use client";
 
 import { useState } from "react";
-import { Card, Notice, Button, Field, Input } from "@/components/ui";
+import { useApi, useLoad } from "@/lib/api";
+import type { Account } from "@/lib/types";
+import { Button, Card, Field, Input, Notice } from "@/components/ui";
 
+type NeoAccount = Account & { auth_stage?: string };
 export default function KotakNeoPage() {
-  const [showSetup, setShowSetup] = useState(false);
-  const [checked, setChecked] = useState(false);
+  const { call, config } = useApi();
+  const accounts = useLoad<NeoAccount[]>("/api/brokers/accounts");
+  const [label, setLabel] = useState("My Kotak Neo");
+  const [consumerKey, setConsumerKey] = useState("");
+  const [mobile, setMobile] = useState("");
+  const [ucc, setUcc] = useState("");
+  const [selected, setSelected] = useState<number | null>(null);
+  const [totp, setTotp] = useState("");
+  const [mpin, setMpin] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<{ kind: "ok" | "error" | "warn"; text: string } | null>(null);
+  const neoAccounts = (accounts.data ?? []).filter((a) => a.kind === "kotak_neo");
+  const activeId = selected ?? neoAccounts[0]?.id ?? null;
+
+  async function addAccount(e: React.FormEvent) {
+    e.preventDefault(); setBusy(true); setNotice(null);
+    try {
+      const created = await call<NeoAccount>("/api/brokers/accounts/kotak-neo", {
+        method: "POST",
+        body: JSON.stringify({ label, consumer_key: consumerKey, mobile_number: mobile, ucc }),
+      });
+      setConsumerKey(""); setMobile(""); setUcc(""); setSelected(created.id);
+      await accounts.reload();
+      setNotice({ kind: "ok", text: "Kotak Neo account saved with encrypted credentials. Continue with TOTP login." });
+    } catch (e) { setNotice({ kind: "error", text: (e as Error).message }); }
+    finally { setBusy(false); }
+  }
+
+  async function authenticate(step: "totp" | "mpin") {
+    if (!activeId) return;
+    setBusy(true); setNotice(null);
+    try {
+      await call(`/api/brokers/accounts/${activeId}/kotak-neo/${step}`, {
+        method: "POST", body: JSON.stringify(step === "totp" ? { totp } : { mpin }),
+      });
+      setTotp(""); setMpin("");
+      await accounts.reload();
+      setNotice({ kind: "ok", text: step === "totp" ? "TOTP accepted. Enter MPIN to complete authentication." : "Kotak Neo session established. Live trading remains disabled." });
+    } catch (e) { setNotice({ kind: "error", text: (e as Error).message }); }
+    finally { setBusy(false); }
+  }
+
+  async function removeAccount(id: number) {
+    if (!confirm("Remove this Kotak Neo account and its encrypted session?")) return;
+    setBusy(true);
+    try { await call(`/api/brokers/accounts/${id}`, { method: "DELETE" }); setSelected(null); await accounts.reload(); setNotice({ kind: "ok", text: "Kotak Neo account removed." }); }
+    catch (e) { setNotice({ kind: "error", text: (e as Error).message }); }
+    finally { setBusy(false); }
+  }
 
   return (
     <div className="grid gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gold">Broker integration</p>
-          <h1 className="mt-1 text-2xl font-bold">Kotak Neo API</h1>
-          <p className="mt-1 text-sm text-ink2">Dedicated connection workspace for your Kotak Neo trading account.</p>
-        </div>
+        <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-gold">Broker integration</p><h1 className="mt-1 text-2xl font-bold">Kotak Neo API</h1><p className="mt-1 text-sm text-ink2">Secure two-step authentication and session management.</p></div>
         <span className="rounded-full border border-gold/50 bg-gold/10 px-3 py-1 text-xs font-semibold text-ink">PAPER MODE · LIVE DISABLED</span>
       </div>
-
-      <Notice kind="warn">
-        This page is the first UI stage. API credentials are not submitted or stored here yet. Backend authentication and encrypted session storage must be completed before a connection can be established.
-      </Notice>
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card title="Connection">
-          <p className="text-lg font-semibold">Not connected</p>
-          <p className="mt-1 text-xs text-ink2">Authentication not configured</p>
-        </Card>
-        <Card title="Trading mode">
-          <p className="text-lg font-semibold">Paper only</p>
-          <p className="mt-1 text-xs text-ink2">Real orders are not available</p>
-        </Card>
-        <Card title="Broker">
-          <p className="text-lg font-semibold">Kotak Neo</p>
-          <p className="mt-1 text-xs text-ink2">Official Neo Trade API</p>
-        </Card>
-      </div>
-
-      <Card title="Before you connect">
-        <ol className="grid list-decimal gap-3 pl-5 text-sm">
-          <li>In Kotak Neo, open <b>More → Trade API → API Dashboard</b> and create an application. Keep its access token private.</li>
-          <li>Complete <b>TOTP Registration</b> from the API Dashboard using an authenticator app.</li>
-          <li>Find your <b>UCC / Client Code</b> in your Kotak Neo profile.</li>
-          <li>Keep your registered mobile number and 6-digit MPIN ready. Never share these values in chat or screenshots.</li>
-        </ol>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button onClick={() => setShowSetup((v) => !v)} variant="ghost">{showSetup ? "Hide authentication flow" : "Show authentication flow"}</Button>
-          <a className="rounded-lg border border-line px-4 py-2 text-sm font-semibold text-ink hover:bg-paper" href="https://github.com/Kotak-Neo/kotak-neo-python" target="_blank" rel="noreferrer">Official Python SDK</a>
-          <a className="rounded-lg border border-line px-4 py-2 text-sm font-semibold text-ink hover:bg-paper" href="https://github.com/Kotak-Neo/Kotak-Neo/blob/main/docs/authentication.md" target="_blank" rel="noreferrer">Authentication guide</a>
-        </div>
-        {showSetup && (
-          <div className="mt-4 rounded-lg border border-line bg-paper p-4 text-sm">
-            <p className="font-semibold">Two-step login sequence</p>
-            <ol className="mt-2 grid list-decimal gap-2 pl-5 text-ink2">
-              <li>TOTP login validates mobile number, UCC and the current six-digit TOTP; the API returns a temporary View token and session ID.</li>
-              <li>MPIN validation upgrades the session and returns the Trade token, session ID and base URL.</li>
-              <li>VM Algo will encrypt the session data at rest and use it only from the backend.</li>
-            </ol>
-          </div>
-        )}
+      {config && !config.brokers_available && <Notice kind="warn">Broker connections are disabled in hosted open mode. Enable login in Settings → Access.</Notice>}
+      {notice && <Notice kind={notice.kind}>{notice.text}</Notice>}
+      <Card title="Kotak Neo accounts">
+        {neoAccounts.length === 0 ? <p className="text-sm text-ink2">No Kotak Neo account configured yet.</p> : <div className="grid gap-2">
+          {neoAccounts.map((a) => <div key={a.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line p-3">
+            <button className="text-left" onClick={() => setSelected(a.id)}><span className="font-semibold">{a.label}</span><span className="ml-2 text-xs text-ink2">{a.auth_stage === "connected" ? "CONNECTED" : a.auth_stage === "view_session" ? "TOTP VERIFIED · MPIN REQUIRED" : "LOGIN REQUIRED"}</span></button>
+            <Button variant="ghost" disabled={busy} onClick={() => removeAccount(a.id)}>Remove</Button>
+          </div>)}
+        </div>}
       </Card>
-
-      <Card title="Connection workspace">
-        <p className="text-sm text-ink2">The secure credential form will be enabled after the backend authentication endpoints, encrypted session persistence and session-expiry handling are added.</p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <Field label="Consumer / API access token">
-            <Input type="password" disabled placeholder="Enabled in backend integration stage" autoComplete="off" />
-          </Field>
-          <Field label="Registered mobile number">
-            <Input disabled placeholder="+91XXXXXXXXXX" autoComplete="off" />
-          </Field>
-          <Field label="UCC / Client Code">
-            <Input disabled placeholder="Configured securely in next stage" autoComplete="off" />
-          </Field>
-          <Field label="TOTP and MPIN">
-            <Input disabled placeholder="Entered only during secure login" autoComplete="off" />
-          </Field>
-        </div>
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <Button disabled>Connect Kotak Neo (backend pending)</Button>
-          <Button variant="ghost" onClick={() => setChecked(true)}>Review security checklist</Button>
-        </div>
-        {checked && <Notice kind="ok">Security checklist: credentials must be sent only over HTTPS, encrypted before database storage, excluded from logs, and never returned to the browser.</Notice>}
+      <Card title="Add Kotak Neo account">
+        <form onSubmit={addAccount} className="grid gap-3 sm:grid-cols-2">
+          <Field label="Account label"><Input required value={label} onChange={(e) => setLabel(e.target.value)} maxLength={80} /></Field>
+          <Field label="Consumer key / API access token"><Input required type="password" autoComplete="off" value={consumerKey} onChange={(e) => setConsumerKey(e.target.value)} /></Field>
+          <Field label="Registered mobile (+91...)"><Input required value={mobile} onChange={(e) => setMobile(e.target.value)} placeholder="+91XXXXXXXXXX" autoComplete="off" /></Field>
+          <Field label="UCC / Client code"><Input required value={ucc} onChange={(e) => setUcc(e.target.value)} autoComplete="off" /></Field>
+          <div className="sm:col-span-2"><Button disabled={busy || config?.brokers_available === false}>Save encrypted account</Button></div>
+        </form>
+        <p className="mt-3 text-xs text-ink2">Consumer key is encrypted by the backend before database storage. TOTP and MPIN are sent only for the login request and are not persisted.</p>
       </Card>
-
-      <Card title="Planned account data">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {["Funds & margins", "Positions & holdings", "Order book & trade book", "Live quotes", "Session health", "API activity log"].map((item) => (
-            <div key={item} className="rounded-lg border border-line p-3">
-              <p className="text-sm font-medium">{item}</p>
-              <p className="mt-1 text-xs text-ink2">Available after authenticated API connection</p>
-            </div>
-          ))}
+      {activeId !== null && <Card title="Daily authentication">
+        <p className="mb-3 text-sm text-ink2">Complete TOTP first. Then submit your six-digit Kotak Neo MPIN. Never send either value in chat or save it in browser storage.</p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="6-digit authenticator TOTP"><Input inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={totp} onChange={(e) => setTotp(e.target.value.replace(/\\D/g, "").slice(0, 6))} placeholder="Current TOTP" /></Field>
+          <div className="flex items-end"><Button disabled={busy || totp.length !== 6} onClick={() => authenticate("totp")}>Verify TOTP</Button></div>
+          <Field label="6-digit MPIN"><Input type="password" inputMode="numeric" autoComplete="off" maxLength={6} value={mpin} onChange={(e) => setMpin(e.target.value.replace(/\\D/g, "").slice(0, 6))} placeholder="Trading MPIN" /></Field>
+          <div className="flex items-end"><Button disabled={busy || mpin.length !== 6} onClick={() => authenticate("mpin")}>Validate MPIN</Button></div>
         </div>
+      </Card>}
+      <Card title="Trading and data status">
+        <div className="grid gap-3 sm:grid-cols-3">
+          {["Funds & margins", "Positions & holdings", "Order & trade book", "Market quotes", "Session health", "API activity log"].map((item) => <div key={item} className="rounded-lg border border-line p-3"><p className="text-sm font-medium">{item}</p><p className="mt-1 text-xs text-ink2">Next integration stage</p></div>)}
+        </div>
+        <p className="mt-4 text-sm font-semibold text-loss">Live order placement is blocked server-side. This stage only establishes the authenticated session.</p>
       </Card>
     </div>
   );
