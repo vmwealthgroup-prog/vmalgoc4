@@ -72,11 +72,12 @@ export default function AlgoTestPage() {
   const [busy, setBusy] = useState(false);
 
   const selected = PRESETS[preset];
-  const curve = useMemo(() => result?.equity.map((p) => ({
+  const baseClose = result?.equity[0]?.close || 1;
+  const curve = useMemo(() => result ? result.equity.map((p) => ({
     time: p.t.slice(0, 16).replace("T", " "),
     Strategy: +((p.equity - 1) * 100).toFixed(2),
-    "Buy & hold": +((p.close / (result.equity[0]?.close || 1) - 1) * 100).toFixed(2)
-  })) ?? [], [result]);
+    "Buy & hold": +((p.close / baseClose - 1) * 100).toFixed(2)
+  })) : [], [result, baseClose]);
 
   function choosePreset(value: Preset) {
     setPreset(value); setInterval(PRESETS[value].interval); setStop(PRESETS[value].stop); setTarget(PRESETS[value].target);
