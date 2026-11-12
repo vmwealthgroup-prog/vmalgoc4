@@ -53,11 +53,32 @@ const PRESETS: Record<Preset, { label: string; interval: string; entry: any; exi
     exit: { all: [{ left: { ind: "rsi", period: 14 }, op: ">", right: { value: 55 } }] },
     note: "Mean-reversion hypothesis; test separately in trending and range-bound regimes.", stop: 1.5, target: 2.5
   }
+
 };
+
+type StrategyCard = { id: string; name: string; market: string; style: string; summary: string; readiness: "ready" | "options-data"; preset?: Preset };
+const STRATEGY_CATALOGUE: StrategyCard[] = [
+  { id: "trend_filter", name: "VM Trend Filter", market: "NSE / BSE", style: "Trend following", summary: "EMA 20/50/200 alignment with RSI confirmation.", readiness: "ready", preset: "vm_trend" },
+  { id: "ema_crossover", name: "EMA 5/20 Crossover", market: "NSE / BSE", style: "Momentum", summary: "Closed-candle moving-average crossover baseline.", readiness: "ready", preset: "ema_5_20" },
+  { id: "breakout", name: "20-Bar Breakout", market: "NSE / BSE", style: "Breakout", summary: "Prior-high breakout with a prior-low exit.", readiness: "ready", preset: "breakout_20" },
+  { id: "rsi_recovery", name: "RSI Recovery", market: "NSE / BSE", style: "Mean reversion", summary: "RSI recovery with EMA trend confirmation.", readiness: "ready", preset: "rsi_recovery" },
+  { id: "directional_spread", name: "VM NIFTY Directional Spread with Hedge", market: "NFO", style: "Bullish / Bearish · Option selling", summary: "Bull put or bear call credit spread, selected by trend regime; protective long option defines risk.", readiness: "options-data" },
+  { id: "iron_condor", name: "VM Hedged Iron Condor", market: "NFO", style: "Non-directional · Theta", summary: "OTM call and put credit spreads with wing protection and range/volatility filters.", readiness: "options-data" },
+  { id: "iron_butterfly", name: "VM Hedged Iron Butterfly", market: "NFO", style: "Expiry · Short volatility", summary: "ATM short straddle with protective wings; strict gap, gamma and time exits.", readiness: "options-data" },
+  { id: "momentum_options", name: "VM Momentum Options Buying", market: "NFO", style: "Directional · CE / PE", summary: "VWAP, EMA 9/21, RSI and opening-range confirmation for premium buying.", readiness: "options-data" },
+  { id: "expiry_theta", name: "VM NIFTY Expiry Theta", market: "NFO", style: "Expiry · Earn theta", summary: "Expiry-session defined-risk premium selling with volatility and time filters.", readiness: "options-data" },
+  { id: "calendar", name: "VM Calendar Spread", market: "NFO", style: "Volatility · Calendar", summary: "Different-expiry legs to research term structure, theta and vega exposure.", readiness: "options-data" },
+  { id: "ratio_hedged", name: "VM Hedged Ratio Spread", market: "NFO", style: "Directional · Volatility", summary: "Ratio structure with protective wings, scenario-based risk and margin checks.", readiness: "options-data" },
+  { id: "banknifty_monthly", name: "VM BANKNIFTY Monthly Trend", market: "NFO", style: "Positional · Trend", summary: "Monthly-expiry directional spread with higher-timeframe trend filter.", readiness: "options-data" },
+  { id: "sensex_basket", name: "VM SENSEX Momentum Basket", market: "BFO", style: "Momentum · Breakout", summary: "Directional options basket with breadth and breakout confirmation.", readiness: "options-data" },
+  { id: "crude_hedged", name: "VM Crude Oil Hedged Seller", market: "MCX", style: "Non-directional · Option selling", summary: "Defined-risk commodity option selling with contract and expiry-aware sizing.", readiness: "options-data" }
+];
 
 export default function AlgoTestPage() {
   const { ready, call } = useApi();
   const [preset, setPreset] = useState<Preset>("vm_trend");
+  const [strategyId, setStrategyId] = useState("trend_filter");
+  const activeStrategy = STRATEGY_CATALOGUE.find((item) => item.id === strategyId) ?? STRATEGY_CATALOGUE[0];
   const [symbol, setSymbol] = useState("RELIANCE");
   const [exchange, setExchange] = useState("NSE");
   const [interval, setInterval] = useState(PRESETS.vm_trend.interval);
@@ -83,7 +104,15 @@ export default function AlgoTestPage() {
     setPreset(value); setInterval(PRESETS[value].interval); setStop(PRESETS[value].stop); setTarget(PRESETS[value].target);
   }
 
+  function chooseStrategy(item: StrategyCard) {
+    setStrategyId(item.id);
+    if (item.preset) choosePreset(item.preset);
+    if (item.market === "NFO" || item.market === "BFO") { setExchange(item.market); setSource("auto"); }
+    if (item.market === "MCX") { setExchange("MCX"); setSource("auto"); }
+  }
+
   async function runTest() {
+    if (activeStrategy.readiness !== "ready") { setError("This options strategy needs historical option-contract candles and leg-level simulation. It is catalogued for research but cannot be backtested by the current underlying-candle engine."); return; }
     setBusy(true); setError(""); setResult(null);
     const spec = {
       symbol: symbol.trim().toUpperCase(), exchange, interval, side,
@@ -109,6 +138,21 @@ export default function AlgoTestPage() {
         <div><p className="text-xs font-semibold uppercase tracking-widest text-ink2">VM Algo Research Lab</p><h1 className="mt-1 text-2xl font-bold">AlgoTest</h1><p className="mt-1 text-sm text-ink2">Configure, backtest and inspect a strategy without placing broker orders.</p></div>
         <span className="rounded-full border border-gain/30 bg-gain/5 px-3 py-1 text-xs font-semibold text-gain">BACKTEST ONLY · NO LIVE ORDERS</span>
       </div>
+
+      <Card title="Strategy catalogue">
+        <p className="mb-3 text-sm text-ink2">Choose a research hypothesis. Strategies marked “Options data required” are catalogued but are not falsely backtested using index candles.</p>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {STRATEGY_CATALOGUE.map((item) => (
+            <button key={item.id} type="button" onClick={() => chooseStrategy(item)} aria-pressed={strategyId === item.id}
+              className={`rounded-xl border p-3 text-left transition ${strategyId === item.id ? "border-gold bg-gold/5 ring-1 ring-gold" : "border-line bg-white hover:border-ink2"}`}>
+              <div className="flex items-start justify-between gap-2"><span className="text-sm font-semibold">{item.name}</span><span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold ${item.readiness === "ready" ? "bg-gain/10 text-gain" : "bg-amber-100 text-amber-800"}`}>{item.readiness === "ready" ? "Backtest ready" : "Options data required"}</span></div>
+              <p className="mt-2 text-xs font-medium text-ink2">{item.market} · {item.style}</p>
+              <p className="mt-2 text-xs text-ink2">{item.summary}</p>
+            </button>
+          ))}
+        </div>
+        <div className="mt-4 rounded-lg bg-paper p-3 text-sm"><b>Selected:</b> {activeStrategy.name}<p className="mt-1 text-xs text-ink2">{activeStrategy.readiness === "ready" ? "Uses the existing candle-based backtest endpoint." : "Research specification only. Requires historical option-chain/contract data, option premiums, expiry/strike mapping, Greeks/OI where available, leg-level fills, margin and statutory charges before performance testing."}</p></div>
+      </Card>
 
       <Card title="Strategy hypothesis">
         <div className="grid gap-4 md:grid-cols-2">
@@ -136,8 +180,8 @@ export default function AlgoTestPage() {
           <Field label="Take-profit (%)"><Input type="number" min={0} max={500} step={0.1} value={target} onChange={(e) => setTarget(Number(e.target.value))} /></Field>
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <Button onClick={runTest} disabled={!ready || busy || !symbol.trim() || bars < 60 || bars > 5000 || cost < 0 || cost > 200 || stop < 0 || target < 0}>{busy ? "Running backtest…" : "Run AlgoTest"}</Button>
-          <span className="text-xs text-ink2">Execution model: signal at candle close, fill on next candle. No lookahead.</span>
+          <Button onClick={runTest} disabled={!ready || busy || activeStrategy.readiness !== "ready" || !symbol.trim() || bars < 60 || bars > 5000 || cost < 0 || cost > 200 || stop < 0 || target < 0}>{busy ? "Running backtest…" : activeStrategy.readiness === "ready" ? "Run AlgoTest" : "Options backtest not yet available"}</Button>
+          <span className="text-xs text-ink2">Execution model: signal at candle close, fill on next candle. No lookahead. Research only; no broker orders.</span>
         </div>
         {error && <div className="mt-3"><Notice kind="error">{error}</Notice></div>}
       </Card>
