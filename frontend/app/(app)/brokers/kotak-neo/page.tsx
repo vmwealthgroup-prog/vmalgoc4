@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useApi, useLoad } from "@/lib/api";
 import type { Account } from "@/lib/types";
 import { Button, Card, Field, Input, Notice } from "@/components/ui";
+import { wsBase } from "@/lib/env";
 
 type NeoAccount = Account & { auth_stage?: string };
 export default function KotakNeoPage() {
-  const { call, config } = useApi();
+  const { call, config, token } = useApi();
   const accounts = useLoad<NeoAccount[]>("/api/brokers/accounts");
   const [label, setLabel] = useState("My Kotak Neo");
   const [consumerKey, setConsumerKey] = useState("");
@@ -24,8 +25,43 @@ export default function KotakNeoPage() {
   const [scripResult, setScripResult] = useState<unknown>(null);
   const [instrumentToken, setInstrumentToken] = useState("");
   const [quoteResult, setQuoteResult] = useState<unknown>(null);
+  const [streamStatus, setStreamStatus] = useState("disconnected");
+  const [liveTick, setLiveTick] = useState<{ symbol: string; exchange: string; ltp: number; ts: number } | null>(null);
+  const socketRef = useRef<WebSocket | null>(null);
   const neoAccounts = (accounts.data ?? []).filter((a) => a.kind === "kotak_neo");
   const activeId = selected ?? neoAccounts[0]?.id ?? null;
+
+  useEffect(() => () => { socketRef.current?.close(); }, []);
+
+  function startLiveFeed() {
+    if (!activeId || !instrumentToken.trim() || !neoAccounts.find((a) => a.id === activeId)?.token_ok) return;
+    socketRef.current?.close();
+    setLiveTick(null);
+    setStreamStatus("connecting");
+    const query = token ? `?token=${encodeURIComponent(token)}` : "";
+    const socket = new WebSocket(`${wsBase()}/ws/kotak-neo/${activeId}${query}`);
+    socketRef.current = socket;
+    socket.onopen = () => socket.send(JSON.stringify({
+      type: "subscribe",
+      instruments: [{ instrument_token: instrumentToken.trim(), exchange_segment: exchangeSegment, symbol }],
+    }));
+    socket.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message.type === "status") setStreamStatus(message.status);
+        else if (message.type === "tick") { setLiveTick(message); setStreamStatus("connected"); }
+        else if (message.type === "error") setStreamStatus(message.message || "error");
+      } catch { setStreamStatus("Invalid market-feed message"); }
+    };
+    socket.onerror = () => setStreamStatus("connection error");
+    socket.onclose = () => setStreamStatus((current) => current === "connected" ? "disconnected" : current);
+  }
+
+  function stopLiveFeed() {
+    socketRef.current?.close();
+    socketRef.current = null;
+    setStreamStatus("disconnected");
+  }
 
   async function addAccount(e: React.FormEvent) {
     e.preventDefault(); setBusy(true); setNotice(null);
@@ -152,6 +188,20 @@ export default function KotakNeoPage() {
           <div className="flex items-end"><Button disabled={busy || !activeId || !instrumentToken.trim()} onClick={fetchQuote}>Fetch live quote</Button></div>
         </div>
         {quoteResult !== null && <div className="mt-3 rounded-lg border border-line p-3"><p className="mb-2 text-sm font-semibold">Quote response</p><pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all text-xs text-ink2">{JSON.stringify(quoteResult, null, 2)}</pre></div>}
+      </Card>
+      <Card title="Live market feed · Kotak Neo">
+        <p className="mb-3 text-sm text-ink2">Stream real-time prices for the verified instrument token above. The connection is private to this logged-in account and is market-data only.</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button disabled={busy || !activeId || !instrumentToken.trim() || !neoAccounts.find((a) => a.id === activeId)?.token_ok || streamStatus === "connecting" || streamStatus === "connected"} onClick={startLiveFeed}>Start live feed</Button>
+          <Button variant="ghost" disabled={streamStatus === "disconnected"} onClick={stopLiveFeed}>Stop feed</Button>
+          <span className="text-xs text-ink2">Status: {streamStatus}</span>
+        </div>
+        {liveTick && <div className="mt-3 rounded-lg border border-line p-4">
+          <p className="text-xs uppercase tracking-wide text-ink2">{liveTick.symbol} · {liveTick.exchange}</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums">{liveTick.ltp.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+          <p className="mt-1 text-xs text-ink2">Received {new Date(liveTick.ts * 1000).toLocaleTimeString()} · Source: Kotak Neo SFeed</p>
+        </div>}
+        <p className="mt-3 text-xs text-ink2">Search scrip first, confirm the returned token and segment, then start the feed. Only this account's browser session receives these ticks.</p>
       </Card>
       <Card title="Read-only account data">
         <div className="flex flex-wrap items-center justify-between gap-3">

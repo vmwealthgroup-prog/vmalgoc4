@@ -112,3 +112,67 @@ def quotes(credentials: dict[str, Any], instruments: list[dict[str, str]], quote
         raise
     except Exception as exc:
         raise KotakNeoDataError("Kotak Neo market quote request failed.") from exc
+
+
+
+def normalize_stream_instruments(instruments: Any) -> list[dict[str, str]]:
+    """Validate user-selected, broker-resolved instruments before opening SFeed."""
+    if not isinstance(instruments, list) or not instruments or len(instruments) > 50:
+        raise KotakNeoDataError("Select between 1 and 50 instruments for the live feed.")
+    normalized = []
+    for item in instruments:
+        if not isinstance(item, dict):
+            raise KotakNeoDataError("Each live-feed instrument must be an object.")
+        token = str(item.get("instrument_token", "")).strip()
+        segment = str(item.get("exchange_segment", "")).strip()
+        symbol = str(item.get("symbol", "")).strip().upper()
+        if not token.isdigit() or len(token) > 24:
+            raise KotakNeoDataError("Use a numeric instrument token returned by Kotak Neo scrip search.")
+        if segment not in ALLOWED_SEGMENTS:
+            raise KotakNeoDataError("Unsupported exchange segment.")
+        if not symbol or len(symbol) > 40:
+            raise KotakNeoDataError("Each instrument needs a valid trading symbol.")
+        normalized.append({"instrument_token": token, "exchange_segment": segment, "symbol": symbol})
+    return normalized
+
+
+def normalize_stream_tick(message: Any, instruments: list[dict[str, str]]) -> dict[str, Any] | None:
+    """Convert a typed SFeed message to the app's safe, display-only tick shape."""
+    def value(name: str):
+        if isinstance(message, dict):
+            return message.get(name)
+        return getattr(message, name, None)
+
+    token = str(value("instrument_token") or "").strip()
+    segment = str(value("exchange_segment") or "").strip()
+    selected = next(
+        (item for item in instruments if item["instrument_token"] == token
+         and (not segment or item["exchange_segment"] == segment)),
+        None,
+    )
+    if selected is None:
+        return None
+    try:
+        import math
+        ltp = float(value("last_traded_price"))
+        if not math.isfinite(ltp) or ltp <= 0:
+            return None
+    except (TypeError, ValueError):
+        return None
+    from time import time
+    return {
+        "type": "tick", "symbol": selected["symbol"],
+        "exchange": selected["exchange_segment"], "instrument_token": token,
+        "ltp": ltp, "ts": time(), "src": "kotak_neo",
+    }
+
+
+def create_market_websocket(credentials: dict[str, Any]):
+    """Create the official async SFeed client from an already authenticated session."""
+    if not credentials.get("trade_token") or not credentials.get("trade_sid"):
+        raise KotakNeoDataError("Complete Kotak Neo TOTP and MPIN authentication first.")
+    client = _client(credentials)
+    try:
+        return client.create_websocket()
+    except Exception as exc:
+        raise KotakNeoDataError("Could not initialize the Kotak Neo live market feed.") from exc
