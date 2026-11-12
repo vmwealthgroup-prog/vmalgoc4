@@ -127,11 +127,11 @@ export default function AlgoTestPage() {
       <Card title="Market and test settings">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="Symbol"><Input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="RELIANCE" maxLength={40} /></Field>
-          <Field label="Exchange"><Select value={exchange} onChange={(e) => setExchange(e.target.value)}>{["NSE", "BSE", "NFO", "MCX", "CRYPTO"].map((x) => <option key={x}>{x}</option>)}</Select></Field>
+          <Field label="Exchange"><Select value={exchange} onChange={(e) => { setExchange(e.target.value); setSource("auto"); }}>{["NSE", "BSE", "NFO", "MCX", "CRYPTO"].map((x) => <option key={x}>{x}</option>)}</Select></Field>
           <Field label="Candle interval"><Select value={interval} onChange={(e) => setInterval(e.target.value)}>{["1m", "5m", "15m", "1h", "1d"].map((x) => <option key={x}>{x}</option>)}</Select></Field>
           <Field label="Historical candles (60–5,000)"><Input type="number" min={60} max={5000} value={bars} onChange={(e) => setBars(Number(e.target.value))} /></Field>
           <Field label="Estimated cost (bps per position change)"><Input type="number" min={0} max={200} step={0.5} value={cost} onChange={(e) => setCost(Number(e.target.value))} /></Field>
-          <Field label="Historical data source"><Select value={source} onChange={(e) => setSource(e.target.value)}><option value="auto">Auto (best available)</option><option value="openalgo">OpenAlgo broker history</option><option value="recorded">Recorded live ticks</option><option value="crypto">Public crypto exchange data</option><option value="demo">Demo / synthetic (not valid for evaluation)</option></Select></Field>
+          <Field label="Historical data source"><Select value={source} onChange={(e) => setSource(e.target.value)}><option value="auto">Auto (best available)</option>{exchange !== "CRYPTO" && <option value="openalgo">OpenAlgo broker history</option>}<option value="recorded">Recorded live ticks</option>{exchange === "CRYPTO" && <option value="crypto">Public crypto exchange data</option>}<option value="demo">Demo / synthetic (not valid for evaluation)</option></Select></Field>
           <Field label="Stop-loss (%)"><Input type="number" min={0} max={100} step={0.1} value={stop} onChange={(e) => setStop(Number(e.target.value))} /></Field>
           <Field label="Take-profit (%)"><Input type="number" min={0} max={500} step={0.1} value={target} onChange={(e) => setTarget(Number(e.target.value))} /></Field>
         </div>
