@@ -107,8 +107,8 @@ export default function AlgoTestPage() {
   function chooseStrategy(item: StrategyCard) {
     setStrategyId(item.id);
     if (item.preset) choosePreset(item.preset);
-    if (item.market === "NFO" || item.market === "BFO") { setExchange(item.market); setSource("auto"); }
-    if (item.market === "MCX") { setExchange("MCX"); setSource("auto"); }
+    if (item.market === "NFO" || item.market === "BFO") { setExchange(item.market); setSource("auto"); setSymbol(item.market === "BFO" ? "SENSEX" : "NIFTY"); }
+    if (item.market === "MCX") { setExchange("MCX"); setSource("auto"); setSymbol("CRUDEOIL"); }
   }
 
   async function runTest() {
@@ -171,7 +171,7 @@ export default function AlgoTestPage() {
       <Card title="Market and test settings">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="Symbol"><Input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="RELIANCE" maxLength={40} /></Field>
-          <Field label="Exchange"><Select value={exchange} onChange={(e) => { setExchange(e.target.value); setSource("auto"); }}>{["NSE", "BSE", "NFO", "MCX", "CRYPTO"].map((x) => <option key={x}>{x}</option>)}</Select></Field>
+          <Field label="Exchange"><Select value={exchange} onChange={(e) => { setExchange(e.target.value); setSource("auto"); }}>{["NSE", "BSE", "NFO", "BFO", "MCX", "CRYPTO"].map((x) => <option key={x}>{x}</option>)}</Select></Field>
           <Field label="Candle interval"><Select value={interval} onChange={(e) => setInterval(e.target.value)}>{["1m", "5m", "15m", "1h", "1d"].map((x) => <option key={x}>{x}</option>)}</Select></Field>
           <Field label="Historical candles (60–5,000)"><Input type="number" min={60} max={5000} value={bars} onChange={(e) => setBars(Number(e.target.value))} /></Field>
           <Field label="Estimated cost (bps per position change)"><Input type="number" min={0} max={200} step={0.5} value={cost} onChange={(e) => setCost(Number(e.target.value))} /></Field>
