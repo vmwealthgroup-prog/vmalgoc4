@@ -53,3 +53,36 @@ P5 — validation workflow: promote a candidate from backtest to paper only afte
 - Results show metrics and curve from the server response; errors are visible and reruns are possible.
 - Typecheck, lint/build and backend tests pass before merge.
 - Existing routes, database, broker integrations and live-trading safety gates remain unchanged.
+
+## Tradetron-inspired strategy catalogue added to AlgoTest
+
+The page now presents a selectable catalogue with explicit readiness labels.
+
+### Candle-engine presets (currently runnable)
+- VM Trend Filter — EMA 20/50/200 stack, close above EMA20 and RSI14 above 50.
+- EMA 5/20 Crossover — closed-candle momentum baseline.
+- 20-Bar Breakout — prior-bar high breakout with prior-bar low exit.
+- RSI Recovery — RSI14 recovery above 30 with EMA20 confirmation.
+
+These presets use the existing candle backtest API. They are not option-selling strategies and their results must not be interpreted as option P&L.
+
+### Derivatives research catalogue (not yet backtestable)
+- VM NIFTY Directional Spread with Hedge — regime-selected bull put / bear call credit spread.
+- VM Hedged Iron Condor — two defined-risk credit spreads for range regimes.
+- VM Hedged Iron Butterfly — ATM short straddle with protective wings.
+- VM Momentum Options Buying — VWAP, EMA 9/21, RSI and opening-range confirmation.
+- VM NIFTY Expiry Theta — expiry-session defined-risk premium selling.
+- VM Calendar Spread — different-expiry legs and volatility term structure.
+- VM Hedged Ratio Spread — ratio structure with protective wings.
+- VM BANKNIFTY Monthly Trend — higher-timeframe directional spread.
+- VM SENSEX Momentum Basket — breadth and breakout-led options basket.
+- VM Crude Oil Hedged Seller — MCX contract-aware defined-risk premium selling.
+
+The UI blocks a backtest request for these derivatives concepts rather than sending underlying-index candles to the existing single-instrument engine. The catalogue explains that historical option-contract candles, expiry/strike mapping, leg-level fills, margin, Greeks/OI where available, and segment-specific costs are prerequisites.
+
+### Next implementation sequence
+1. Build an instrument/contract master and historical option-chain ingestion with expiry, strike, CE/PE, lot size and contract identifiers.
+2. Add a multi-leg event-driven simulator with bid/ask or conservative fill assumptions, hedge-aware margin, stop/target/time exits and partial-fill handling.
+3. Add India segment-specific brokerage, STT, exchange charges, SEBI fee, GST, stamp duty and slippage.
+4. Validate on chronological out-of-sample periods, expiry and non-expiry regimes, volatility buckets and stress scenarios.
+5. Paper-trade only after independent review. No live-order wiring is part of this PR.
