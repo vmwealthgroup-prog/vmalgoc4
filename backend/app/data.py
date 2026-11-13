@@ -29,7 +29,7 @@ def crypto_candles(symbol: str, interval: str, bars: int, exchange_id: str | Non
     return df[~df.index.duplicated()].sort_index()
 
 
-def get_candles(symbol, exchange, interval="5m", bars=500, source="auto", client=None, db=None) -> pd.DataFrame:
+def get_candles(symbol, exchange, interval="5m", bars=500, source="auto", client=None, db=None, exchange_id=None) -> pd.DataFrame:
     if interval not in FREQ:
         raise ValueError(f"interval must be one of {list(FREQ)}")
     if source == "auto":
@@ -47,5 +47,5 @@ def get_candles(symbol, exchange, interval="5m", bars=500, source="auto", client
     if source == "crypto":
         if exchange != "CRYPTO":
             raise ValueError("crypto candles are only valid for CRYPTO symbols")
-        return crypto_candles(symbol, interval, bars)
+        return crypto_candles(symbol, interval, bars, exchange_id=exchange_id)
     raise ValueError("Unsupported data source")
