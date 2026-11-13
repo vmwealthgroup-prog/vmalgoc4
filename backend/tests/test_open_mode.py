@@ -69,7 +69,7 @@ def test_hosted_open_mode_blocks_brokers(open_client, monkeypatch):
         c = open_client
         assert c.get("/api/app/config").json()["brokers_available"] is False
         r = c.post("/api/brokers/accounts", json={"label": "Z", "broker_name": "zerodha", "host": "http://127.0.0.1:5000", "api_key": "k" * 20}); assert r.status_code == 403
-        assert c.get("/api/brokers/supported").json()["brokers_available"] is False
+        assert c.get("/api/brokers/supported").status_code == 404
         assert c.post("/api/backtests", json={"spec": EMA, "source": "openalgo"}).status_code in (400, 403)
     finally:
         monkeypatch.undo(); get_settings.cache_clear()
