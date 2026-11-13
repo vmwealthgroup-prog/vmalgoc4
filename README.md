@@ -8,7 +8,7 @@ Real orders are impossible until the server owner flips a hard switch, and even 
 | Web | Next.js 14, React 18, TypeScript, Tailwind CSS, Recharts, NextAuth |
 | API | FastAPI, SQLAlchemy 2, Alembic migrations, PostgreSQL, Redis, WebSockets |
 | Worker | tick feeder + strategy runner (one process, run exactly one) |
-| Brokers | Zerodha direct (official `kiteconnect`), any of 35+ Indian brokers via OpenAlgo, paper broker, crypto exchanges via ccxt (read-only or trading) |
+| Brokers | Zerodha direct (official `kiteconnect`), paper broker, crypto exchanges via ccxt (read-only or trading) |
 | Data | real BTC trade ticks from Coinbase's public WebSocket, recorded as candles; demo feed for offline development |
 | AI | advisory analyst (Claude with your API key, or a built-in rule-based analyst); it can never place orders |
 | Hosting | Docker Compose (Postgres, Redis, API, worker, web, Caddy with automatic HTTPS) or systemd units; CI workflow included |
@@ -22,7 +22,7 @@ sizes trades by ATR risk; blocks anything outside your limits; engages a **kill 
 too much or its orders keep failing; caps order rate; tells you on Telegram/Discord/webhook about fills, blocks, trips and expired logins; a **watchdog** alerts if the worker or API goes quiet.
 
 **Needs a human (by design, and by Indian rules):**
-- **A fresh broker login every trading day.** Zerodha does not allow automating its login, and most brokers behind OpenAlgo work the same way. The app reminds you; the login takes under a minute.
+- **A fresh broker login every trading day.** Zerodha does not allow automating its login, and directly connected brokers require their own supported login flow. The app reminds you; the login takes under a minute.
 - **A registered static IP** with your broker (the Brokers page shows your server's IP).
 - **Turning live trading on**: server switch + login mode + per-account enable (with your password) + strategy set to live.
 - **The exchange holiday list** (`MARKET_HOLIDAYS`) each year, and reading your alerts.
@@ -34,7 +34,7 @@ So "fully automatic" means hands-off between those steps, not unattended forever
 - **Backtesting:** next-candle execution (no lookahead), costs, equity vs buy-and-hold, Sharpe, drawdown, win rate, profit factor, trade list
 - **Paper trading with realistic costs:** brokerage, STT, exchange charges, SEBI fee, stamp duty and GST (approximate, editable), net P&L
 - **Scanner:** run any rule set over up to 50 symbols; presets included
-- **Portfolio:** positions, holdings, funds and P&L from paper, Zerodha, OpenAlgo brokers and crypto exchange accounts
+- **Portfolio:** positions, holdings, funds and P&L from paper, Zerodha, legacy gateway brokers and crypto exchange accounts
 - **TradingView alerts:** per-webhook secret URL (shown once, only a hash stored); `buy`, `sell`, `close`; same risk gate as everything else
 - **Real-time dashboard:** live ticks, your order events over WebSocket, system health (feed, worker, market, kill switch)
 - **Alerts:** Telegram, Discord or generic webhook; one message per incident, not a flood
