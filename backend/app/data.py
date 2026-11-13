@@ -1,18 +1,14 @@
-"""Candle providers: demo (deterministic synthetic), openalgo (Indian brokers), crypto (ccxt, public data)."""
+"""Candle providers: demo (synthetic) and crypto (public exchange data)."""
 import zlib
-from datetime import datetime, timedelta, timezone
 import numpy as np
 import pandas as pd
 from .config import get_settings
 
 FREQ = {"1m": "1min", "5m": "5min", "15m": "15min", "1h": "1h", "1d": "1D"}
-SECONDS = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "1d": 86400}
-OA_INTERVAL = {"1m": "1m", "5m": "5m", "15m": "15m", "1h": "1h", "1d": "D"}
 
 
 def demo_candles(symbol: str, interval: str = "5m", bars: int = 500) -> pd.DataFrame:
-    """Deterministic synthetic candles. The series is generated at a fixed length and sliced from the END, so the latest price
-    is the same no matter how many bars are requested (the feeder, runner and paper broker must agree on 'now')."""
+    """Deterministic synthetic candles for research and paper trading only."""
     n = max(5000, bars)
     seed = zlib.crc32(symbol.encode()); rng = np.random.default_rng(seed)
     vol = 0.011 if interval == "1d" else 0.0025
@@ -33,31 +29,23 @@ def crypto_candles(symbol: str, interval: str, bars: int, exchange_id: str | Non
     return df[~df.index.duplicated()].sort_index()
 
 
-def openalgo_candles(client, symbol: str, exchange: str, interval: str, bars: int) -> pd.DataFrame:
-    days = max(2, int(bars * SECONDS[interval] / 86400 * (1.6 if interval != "1d" else 1.5)) + 2)
-    end = datetime.now(timezone.utc).date()
-    df = client.history(symbol=symbol, exchange=exchange, interval=OA_INTERVAL[interval],
-                        start_date=str(end - timedelta(days=days)), end_date=str(end))
-    if isinstance(df, dict):
-        raise RuntimeError(df.get("message", "history failed"))
-    df.columns = [c.lower() for c in df.columns]
-    return df.tail(bars)
-
-
 def get_candles(symbol, exchange, interval="5m", bars=500, source="auto", client=None, db=None) -> pd.DataFrame:
     if interval not in FREQ:
         raise ValueError(f"interval must be one of {list(FREQ)}")
     if source == "auto":
-        source = "openalgo" if client is not None else "demo"
+        source = "crypto" if exchange == "CRYPTO" else "demo"
     if source == "recorded":
-        if db is None: raise ValueError("recorded data needs a database session")
+        if db is None:
+            raise ValueError("recorded data needs a database session")
         from .candles import load_candles
         df = load_candles(db, symbol, interval, bars)
-        if len(df) < 30: raise ValueError(f"Not enough recorded data for {symbol} yet ({len(df)} {interval} candles). The live feed records 1-minute candles while the worker runs.")
+        if len(df) < 30:
+            raise ValueError(f"Not enough recorded data for {symbol} yet ({len(df)} {interval} candles).")
         return df
-    if source == "openalgo":
-        if client is None: raise ValueError("no OpenAlgo account available")
-        return openalgo_candles(client, symbol, exchange, interval, bars)
+    if source == "demo":
+        return demo_candles(symbol, interval, bars)
     if source == "crypto":
+        if exchange != "CRYPTO":
+            raise ValueError("crypto candles are only valid for CRYPTO symbols")
         return crypto_candles(symbol, interval, bars)
-    return demo_candles(symbol, interval, bars)
+    raise ValueError("Unsupported data source")
