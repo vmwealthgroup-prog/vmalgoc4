@@ -12,7 +12,7 @@ Licences below were read from each repository's own LICENSE file on the date thi
 | alwin48/fyers-trading-bot | Modular Fyers intraday bot | MIT | **REFERENCE ONLY** | Not integrated. No direct Fyers adapter is included. |
 | ivopetiz/algotrading | Older crypto strategy examples | MIT | **REFERENCE ONLY** | Not integrated (crypto, not maintained recently). |
 | CryptoGnome/Tradingview-Webhook-Bot | TradingView alerts to crypto trades | NO LICENSE FILE | **NOT USED** | No licence file: all rights reserved, so it cannot legally be reused. VM Algo's own TradingView receiver places crypto orders through ccxt instead (see README). |
-| FyersDev/fyers-api-sample-code | Fyers sample code | NO LICENSE FILE | **NOT USED** | No licence file. A direct Fyers adapter was not built (see README); use Fyers through OpenAlgo. |
+| FyersDev/fyers-api-sample-code | Fyers sample code | NO LICENSE FILE | **NOT USED** | No licence file. A direct Fyers adapter was not built; no active Fyers integration is provided. |
 | shubhankarbanerjee/FyersTrading | Fyers backtesting and execution | NO LICENSE FILE | **NOT USED** | No licence file. |
 | freqtrade/freqtrade | Full crypto trading bot framework | GPL-3.0 | **NOT EMBEDDED** | GPL-3.0 is copyleft and it is a complete competing application. If you want it, run it as a separate service. |
 | polakowo/vectorbt | Vectorised backtesting library | Apache-2.0 + Commons Clause | **NOT EMBEDDED** | Apache-2.0 with the Commons Clause, which forbids selling software whose value derives substantially from it. VM Algo has its own backtester; use vectorbt only for private research. |
@@ -25,9 +25,9 @@ Licences below were read from each repository's own LICENSE file on the date thi
 ## Rules applied
 - **Adopt** only permissively licensed, maintained libraries from official or widely used sources, as normal dependencies.
 - **No licence file means all rights reserved:** nothing from those repositories was reused.
-- **Copyleft (GPL/AGPL) code is never embedded.** OpenAlgo is AGPL, so it stays a separate service.
+- **Copyleft (GPL/AGPL) code is never embedded.** OpenAlgo was evaluated and then removed from the active integration; it is not a runtime dependency.
 - **Ideas are not copyrightable, code is:** everything borrowed from reference bots is new code written for this project.
 - **LLM tools stay out of the order path.** An automated system that places real orders should be deterministic and testable.
 
 ## Why Zerodha is direct but Fyers is not
-Zerodha has an official, MIT-licensed client that was installed and inspected. For Fyers, the only licensed reference was a sample bot, and the official sample repo has no licence; a direct adapter would have rested on unverified response formats, with real money behind it. Fyers (and 35+ other brokers) work through OpenAlgo instead.
+Zerodha has an official, MIT-licensed client that was installed and inspected. For Fyers, the only licensed reference was a sample bot, and the official sample repo has no licence; a direct adapter would have rested on unverified response formats, with real money behind it. No Fyers or multi-broker gateway integration is active in this repository.
