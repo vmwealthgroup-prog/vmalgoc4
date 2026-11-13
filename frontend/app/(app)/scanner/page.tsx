@@ -24,7 +24,7 @@ export default function Scanner() {
           <Field label="Scan for"><Select value={preset} onChange={(e) => setPreset(e.target.value)}>{(presets.data ?? []).map((p) => <option key={p.key} value={p.key}>{p.name}</option>)}</Select></Field>
           <Field label="Exchange"><Select value={exchange} onChange={(e) => setExchange(e.target.value)}>{["NSE", "BSE", "NFO", "MCX", "CRYPTO"].map((x) => <option key={x}>{x}</option>)}</Select></Field>
           <Field label="Candle"><Select value={interval} onChange={(e) => setIv(e.target.value)}>{["5m", "15m", "1h", "1d"].map((x) => <option key={x}>{x}</option>)}</Select></Field>
-          <Field label="Data"><Select value={source} onChange={(e) => setSource(e.target.value)}><option value="auto">Auto</option><option value="demo">Demo (synthetic)</option><option value="openalgo">My OpenAlgo broker</option><option value="recorded">Recorded live ticks</option></Select></Field>
+          <Field label="Data"><Select value={source} onChange={(e) => setSource(e.target.value)}><option value="auto">Auto</option><option value="demo">Demo (synthetic)</option><option value="recorded">Recorded live ticks</option></Select></Field>
         </div>
         <div className="mt-4 grid gap-4"><Field label="Symbols (comma separated, up to 50)"><Input value={symbols} onChange={(e) => setSymbols(e.target.value)} /></Field><div><Button onClick={run} disabled={busy}>{busy ? "Scanning…" : "Run scan"}</Button></div></div>
       </Card>

@@ -80,19 +80,26 @@ def test_scanner(client, h):
 def test_brokers_secure_storage(client, h):
     from app.db import SessionLocal
     from app.models import BrokerAccount
-    sup = client.get("/api/brokers/supported", headers=h).json()["brokers"]
-    assert {"zerodha", "angel", "upstox", "dhan", "fyers", "kotak"} <= set(sup)
-    accts = client.get("/api/brokers/accounts", headers=h).json(); assert accts[0]["kind"] == "paper"
-    assert client.post("/api/brokers/accounts", headers=h, json={"label": "Z", "broker_name": "zerodha", "host": "ftp://x", "api_key": "k" * 20}).status_code == 422
-    assert client.post("/api/brokers/accounts", headers=h, json={"label": "Z", "broker_name": "notabroker", "host": "http://127.0.0.1:5000", "api_key": "k" * 20}).status_code == 422
-    r = client.post("/api/brokers/accounts", headers=h, json={"label": "Z", "broker_name": "zerodha", "host": "http://127.0.0.1:5000", "api_key": "SECRETKEY-12345"}); assert r.status_code == 201
-    assert "api_key" not in r.text and "SECRET" not in r.text and r.json()["has_key"]
+    from app.security import encrypt
+    accts = client.get("/api/brokers/accounts", headers=h).json()
+    assert accts[0]["kind"] == "paper"
+    assert client.get("/api/brokers/supported", headers=h).status_code == 404
+    assert client.post("/api/brokers/accounts", headers=h, json={"label": "legacy", "broker_name": "zerodha", "host": "http://127.0.0.1:5000", "api_key": "SECRETKEY-12345"}).status_code == 405
+    kite = client.post("/api/brokers/accounts/kite", headers=h, json={"label": "Z", "api_key": "K" * 20, "api_secret": "S" * 20})
+    assert kite.status_code == 201 and kite.json()["has_key"]
+    uid = client.get("/api/me", headers=h).json()["id"]
     with SessionLocal() as db:
-        raw = db.get(BrokerAccount, r.json()["id"]).api_key_enc
-    assert "SECRETKEY" not in raw and len(raw) > 40                              # encrypted at rest
-    assert client.patch(f"/api/brokers/accounts/{r.json()['id']}/live", headers=h, json={"enabled": True, "password": "password123"}).status_code == 400   # server switch off
+        raw = db.get(BrokerAccount, kite.json()["id"]).api_key_enc
+        legacy = BrokerAccount(user_id=uid, kind="openalgo", label="old gateway", broker_name="zerodha", host="http://127.0.0.1:5000", api_key_enc=encrypt("legacy-secret"))
+        db.add(legacy); db.commit(); legacy_id = legacy.id
+    assert "K" * 20 not in raw and "S" * 20 not in raw and len(raw) > 40
+    listed = client.get("/api/brokers/accounts", headers=h).json()
+    assert any(a["id"] == legacy_id and a["kind"] == "openalgo" for a in listed)
+    assert client.post(f"/api/brokers/accounts/{legacy_id}/test", headers=h).status_code == 410
+    assert client.delete(f"/api/brokers/accounts/{legacy_id}", headers=h).status_code == 204
+    assert client.patch(f"/api/brokers/accounts/{kite.json()['id']}/live", headers=h, json={"enabled": True, "password": "password123"}).status_code == 400
     other = signup(client, "o@example.com")
-    assert client.delete(f"/api/brokers/accounts/{r.json()['id']}", headers=other).status_code == 404
+    assert client.delete(f"/api/brokers/accounts/{kite.json()['id']}", headers=other).status_code == 404
     assert client.post(f"/api/brokers/accounts/{accts[0]['id']}/test", headers=h).json()["ok"] is True
 
 
@@ -133,6 +140,34 @@ def test_live_is_hard_blocked_on_server(client, h):
         o = submit_order(db, u, a, get_broker(db, a), symbol="TCS", exchange="NSE", side="BUY", qty=1, price=10, mode="live")
         assert o.status == "blocked" and "disabled on this server" in o.message
 
+
+def test_runner_blocks_live_indian_strategy_without_real_candles(client, h, monkeypatch):
+    import json
+    from app.brokers.kite import today
+    from app.config import get_settings
+    from app.db import SessionLocal
+    from app.models import BrokerAccount, Order
+    from app.runner import run_once
+    from app.security import encrypt
+    monkeypatch.setenv("LIVE_TRADING_ENABLED", "true")
+    get_settings.cache_clear()
+    try:
+        sid = client.post("/api/strategies", headers=h, json={"name": "live Indian safety", "spec": ALWAYS}).json()["id"]
+        account = client.post("/api/brokers/accounts/kite", headers=h, json={"label": "Kite test", "api_key": "K" * 20, "api_secret": "S" * 20}).json()
+        with SessionLocal() as db:
+            a = db.get(BrokerAccount, account["id"])
+            a.api_key_enc = encrypt(json.dumps({"api_key": "K" * 20, "api_secret": "S" * 20, "access_token": "test-token", "token_date": today()}))
+            a.live_enabled = True
+            db.commit()
+        mode = client.patch(f"/api/strategies/{sid}/mode", headers=h, json={"mode": "live", "account_id": account["id"]})
+        assert mode.status_code == 200, mode.text
+        with SessionLocal() as db:
+            events = run_once(db)
+            assert any(e["type"] == "safety_block" and "no validated real Indian-market candle provider" in e["message"] for e in events)
+            assert db.query(Order).filter(Order.strategy_id == sid).count() == 0
+    finally:
+        monkeypatch.undo()
+        get_settings.cache_clear()
 
 def test_runner_trades_paper_without_duplicates(client, h):
     from app.db import SessionLocal

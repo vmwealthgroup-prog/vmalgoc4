@@ -1,10 +1,10 @@
-"""Automation: evaluates every deployed (paper/live) strategy on fresh candles and trades the difference between the
-target position and the current position, through the same risk-gated pipeline as manual orders."""
+"""Automation: evaluates deployed strategies through the common risk-gated order pipeline."""
 from datetime import datetime, timedelta, timezone
 import json
+import math
 from sqlalchemy import select
 from . import market
-from .brokers.factory import ensure_paper_account, get_broker
+from .brokers.factory import ensure_paper_account, get_broker, live_account_error
 from .config import get_settings
 from .guard import check_breaker
 from .data import get_candles
@@ -14,11 +14,16 @@ from .brokers.kite import today as kite_today, token_ok as kite_token_ok
 from .models import AppSetting, BrokerAccount, Order, Strategy, User
 from .security import decrypt
 from .trading import now_ist, submit_order
+from .policy import live_allowed
 
 
 def _event(user_id, st, o: Order):
     kind = "kill_switch" if "kill switch engaged" in (o.message or "") else "order"
     return {"user_id": user_id, "type": kind, "strategy": st.name, "symbol": o.symbol, "side": o.side, "qty": o.qty, "price": o.price, "status": o.status, "message": o.message, "ts": o.created_at.isoformat() if o.created_at else None}
+
+
+def _safety_event(user, st, message):
+    return {"user_id": user.id, "type": "safety_block", "strategy": st.name, "symbol": st.spec.get("symbol"), "status": "blocked", "message": message}
 
 
 def run_strategy(db, st: Strategy) -> list[dict]:
@@ -31,16 +36,38 @@ def run_strategy(db, st: Strategy) -> list[dict]:
     if reason:
         return [{"user_id": user.id, "type": "breaker", "strategy": st.name, "message": reason}]
     if s.enforce_market_hours and not market.is_open(exch):
-        return []                                              # market closed: nothing to do, no data calls
-    acct = db.get(BrokerAccount, st.account_id) if (live and st.account_id) else ensure_paper_account(db, user)
-    if acct is None:
-        acct = ensure_paper_account(db, user)
-    broker = get_broker(db, acct)
-    data_client = broker.history_client() if live else None
-    df = get_candles(sym, exch, spec["interval"], 300, "crypto" if exch == "CRYPTO" and not data_client else "auto", client=data_client)
-    if len(df) < 30:
         return []
-    direction = int(rule_positions(df, spec).iloc[-2])                       # last COMPLETED bar
+    acct = db.get(BrokerAccount, st.account_id) if (live and st.account_id) else ensure_paper_account(db, user)
+    if acct is None or acct.user_id != user.id:
+        return [_safety_event(user, st, "Selected broker account is missing or does not belong to this strategy owner.")]
+    if live:
+        if not s.live_trading_enabled:
+            return [_safety_event(user, st, "Live trading is disabled on this server (LIVE_TRADING_ENABLED=false).")]
+        if not live_allowed(db):
+            return [_safety_event(user, st, "Live trading requires login to be enabled in Settings.")]
+        account_reason = live_account_error(acct)
+        if account_reason:
+            return [_safety_event(user, st, account_reason)]
+        if exch != "CRYPTO":
+            return [_safety_event(user, st, "Automated Indian-market live strategies are disabled: no validated real Indian-market candle provider is configured. Paper trading and backtesting remain available.")]
+        if acct.kind != "ccxt":
+            return [_safety_event(user, st, "Live crypto strategies require a CCXT exchange account.")]
+    try:
+        broker = get_broker(db, acct)
+        if live:
+            # Live crypto only: use public exchange OHLCV, never demo or an unverified broker-history fallback.
+            df = get_candles(sym, exch, spec["interval"], 300, "crypto", exchange_id=acct.broker_name)
+        else:
+            df = get_candles(sym, exch, spec["interval"], 300, "auto")
+    except Exception as exc:
+        if live:
+            return [_safety_event(user, st, f"Live market data unavailable; no order sent: {str(exc)[:150]}")]
+        raise
+    if len(df) < 30 or not all(math.isfinite(float(df[c].iloc[-1])) for c in ("open", "high", "low", "close")):
+        if live:
+            return [_safety_event(user, st, "Live candle data is incomplete or invalid; no order sent.")]
+        return []
+    direction = int(rule_positions(df, spec).iloc[-2])
     r = spec.get("risk", {}); qty = int(r.get("qty", 1) or 1)
     if r.get("risk_pct") and r.get("equity"):
         qty = atr_qty(float(r["equity"]), float(r["risk_pct"]), float(indicator(df, "atr", 14).iloc[-2]), float(r.get("stop_atr", 2)), max_qty=r.get("max_qty")) or 0
@@ -54,7 +81,6 @@ def run_strategy(db, st: Strategy) -> list[dict]:
     if delta == 0:
         return []
     side, q = ("BUY", delta) if delta > 0 else ("SELL", -delta)
-    # don't re-record an identical blocked decision every loop
     if db.scalar(select(Order.id).where(Order.strategy_id == st.id, Order.status == "blocked", Order.side == side, Order.qty == q,
                                         Order.created_at >= datetime.now(timezone.utc) - timedelta(minutes=10)).limit(1)):
         return []
@@ -89,7 +115,7 @@ def run_once(db) -> list[dict]:
         try:
             events += run_strategy(db, st)
             db.commit()
-        except Exception as e:  # one bad strategy must not stop the others
+        except Exception as e:
             db.rollback()
             events.append({"user_id": st.user_id, "type": "error", "strategy": st.name, "message": str(e)[:200]})
     try:

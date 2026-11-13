@@ -56,7 +56,7 @@ export default function StrategyPage() {
     try { const s = await call<Strategy>(`/api/strategies/${saved!.id}/mode`, { method: "PATCH", body: JSON.stringify({ mode, account_id }) }); setSaved(s); setMsg({ k: "ok", t: `Mode: ${mode}` }); }
     catch (e) { setMsg({ k: "error", t: (e as Error).message }); }
   }
-  const liveAccounts = (accounts.data ?? []).filter((a) => a.kind === "openalgo" && a.live_enabled);
+  const liveAccounts = (accounts.data ?? []).filter((a) => a.live_enabled && (a.kind === "kite" || (a.kind === "ccxt" && a.crypto?.trade === true)));
 
   return (
     <div className="grid gap-6">
@@ -98,7 +98,7 @@ export default function StrategyPage() {
       {msg && <Notice kind={msg.k}>{msg.t}</Notice>}
       <Card title="Test">
         <div className="flex flex-wrap items-end gap-3">
-          <Field label="Data"><Select value={src} onChange={(e) => setSrc(e.target.value)}><option value="auto">Auto</option><option value="demo">Demo (synthetic)</option><option value="openalgo">My OpenAlgo broker</option><option value="crypto">Crypto (public)</option><option value="recorded">Recorded live ticks (real, from this server)</option></Select></Field>
+          <Field label="Data"><Select value={src} onChange={(e) => setSrc(e.target.value)}><option value="auto">Auto</option><option value="demo">Demo (synthetic)</option><option value="crypto">Crypto (public)</option><option value="recorded">Recorded live ticks (real, from this server)</option></Select></Field>
           <Field label="Candles"><Input type="number" min={60} max={5000} value={bars} onChange={(e) => setBars(Number(e.target.value))} className="w-28" /></Field>
           <Field label="Cost (bps per change)"><Input type="number" min={0} step="0.5" value={cost} onChange={(e) => setCost(Number(e.target.value))} className="w-28" /></Field>
           <Button onClick={backtest} disabled={busy}>Run backtest</Button><Button variant="ghost" onClick={save} disabled={busy || locked}>Save</Button>

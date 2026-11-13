@@ -14,7 +14,7 @@ from .base import Broker, BrokerError
 
 class CcxtAdapter(Broker):
     def __init__(self, creds: dict, db=None, account_id=None, client=None):
-        self.quote_ccy, self.trade = creds.get("quote", "USDT").upper(), bool(creds.get("trade"))
+        self.quote_ccy, self.trade = creds.get("quote", "USDT").upper(), creds.get("trade") is True
         self.db, self.account_id = db, account_id
         if client is None:
             if creds["exchange"] not in ccxt.exchanges: raise BrokerError("unknown exchange")

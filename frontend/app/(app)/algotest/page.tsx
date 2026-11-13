@@ -175,7 +175,7 @@ export default function AlgoTestPage() {
           <Field label="Candle interval"><Select value={interval} onChange={(e) => setInterval(e.target.value)}>{["1m", "5m", "15m", "1h", "1d"].map((x) => <option key={x}>{x}</option>)}</Select></Field>
           <Field label="Historical candles (60–5,000)"><Input type="number" min={60} max={5000} value={bars} onChange={(e) => setBars(Number(e.target.value))} /></Field>
           <Field label="Estimated cost (bps per position change)"><Input type="number" min={0} max={200} step={0.5} value={cost} onChange={(e) => setCost(Number(e.target.value))} /></Field>
-          <Field label="Historical data source"><Select value={source} onChange={(e) => setSource(e.target.value)}><option value="auto">Auto (best available)</option>{exchange !== "CRYPTO" && <option value="openalgo">OpenAlgo broker history</option>}<option value="recorded">Recorded live ticks</option>{exchange === "CRYPTO" && <option value="crypto">Public crypto exchange data</option>}<option value="demo">Demo / synthetic (not valid for evaluation)</option></Select></Field>
+          <Field label="Historical data source"><Select value={source} onChange={(e) => setSource(e.target.value)}><option value="auto">Auto (best available)</option><option value="recorded">Recorded live ticks</option>{exchange === "CRYPTO" && <option value="crypto">Public crypto exchange data</option>}<option value="demo">Demo / synthetic (not valid for evaluation)</option></Select></Field>
           <Field label="Stop-loss (%)"><Input type="number" min={0} max={100} step={0.1} value={stop} onChange={(e) => setStop(Number(e.target.value))} /></Field>
           <Field label="Take-profit (%)"><Input type="number" min={0} max={500} step={0.1} value={target} onChange={(e) => setTarget(Number(e.target.value))} /></Field>
         </div>
@@ -198,7 +198,6 @@ export default function AlgoTestPage() {
       {result && (
         <>
           {result.metrics.data_source === "demo" && <Notice kind="warn">Synthetic demo data was used. This result is for UI/testing only and is not evidence of a trading edge.</Notice>}
-          {result.metrics.data_source === "openalgo" && <Notice kind="info">Historical data source: OpenAlgo. This existing backtest route does not yet query the separate Kotak Neo account adapter.</Notice>}
           <div><h2 className="mb-3 text-lg font-semibold">Test result · {result.params.spec.symbol} {result.params.spec.exchange} · {result.params.spec.interval}</h2>
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               <Stat label="Net strategy return" value={<Pnl v={result.metrics.total_return_pct} />} tone={result.metrics.total_return_pct >= 0 ? "gain" : "loss"} />

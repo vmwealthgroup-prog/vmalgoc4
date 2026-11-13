@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from sqlalchemy import func, select
 from .brokers.base import BrokerError
-from .brokers.factory import ensure_limits
+from .brokers.factory import ensure_limits, live_account_error
 from .config import get_settings
 from .engine.risk import Limits, check_order
 from .models import BrokerAccount, Order, User
@@ -34,8 +34,8 @@ def submit_order(db, user: User, account: BrokerAccount, broker, *, symbol, exch
     if mode == "live":
         if not live_allowed(db): return block("live trading needs login: turn on login in Settings first")
         if not s.live_trading_enabled: return block("live trading is disabled on this server (LIVE_TRADING_ENABLED=false)")
-        if account.kind == "paper": return block("live mode needs a broker account, not the paper account")
-        if not account.live_enabled: return block("live trading is not enabled for this broker account")
+        reason = live_account_error(account)
+        if reason: return block(reason)
     recent = db.scalar(select(func.count()).select_from(Order).where(Order.user_id == user.id, Order.status.in_(("filled", "sent")),
                        Order.created_at >= datetime.now(timezone.utc) - timedelta(seconds=1))) or 0
     if recent >= s.max_orders_per_second:
@@ -54,7 +54,7 @@ def submit_order(db, user: User, account: BrokerAccount, broker, *, symbol, exch
                           daily_pnl=day_pnl, hhmm=t.strftime("%H:%M"), duplicate_recent=dup, enforce_window=exchange != "CRYPTO")
     if not ok:
         if why == "daily loss limit hit":
-            lim.kill_switch = True       # sticky: stays on until you review and switch it off in Settings
+            lim.kill_switch = True
             why = "daily loss limit hit: kill switch engaged. Review, then reset it in Settings"
         return block(why)
     try:
@@ -62,5 +62,5 @@ def submit_order(db, user: User, account: BrokerAccount, broker, *, symbol, exch
     except (BrokerError, Exception) as e:
         o.status, o.message = "failed", str(e)[:255]; db.flush(); return o
     o.status, o.message, o.broker_order_id, o.price = r["status"], "PASS", r.get("order_id", ""), r.get("price") or price
-    if r.get("filled_qty"): o.qty = r["filled_qty"]          # the real filled quantity (after exchange rounding), so the position ledger is exact
+    if r.get("filled_qty"): o.qty = r["filled_qty"]
     db.flush(); return o

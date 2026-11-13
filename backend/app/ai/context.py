@@ -34,15 +34,9 @@ def candle_facts(df: pd.DataFrame) -> dict:
 
 def load_candles(db, user, symbol, exchange, interval, bars=300):
     """Best real data first. CRYPTO: ticks recorded from the live feed, then the exchange's public candles, then synthetic demo data (flagged)."""
-    from ..routers.backtests import resolve_data
     tries = [("recorded", None), ("crypto", None)] if exchange == "CRYPTO" else [None]
     for t in tries:
         if t is None:
-            try:
-                src, client = resolve_data(db, user, exchange, "auto")
-                if src in ("openalgo",): return get_candles(symbol, exchange, interval, bars, src, client, db=db), src
-            except Exception:
-                pass
             continue
         try:
             df = get_candles(symbol, exchange, interval, bars, t[0], db=db)
