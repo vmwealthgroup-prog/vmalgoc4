@@ -1,7 +1,7 @@
 """TradingView alert receiver. Create a webhook, paste its URL into a TradingView alert, and send JSON like
    {"action": "buy", "symbol": "TCS", "exchange": "NSE", "qty": 5}        action: buy | sell | close
 Every alert goes through the same risk-gated order path as everything else. The URL contains a secret token (shown once; only its hash is stored)."""
-import hashlib, re, secrets
+import hashlib, re, secrets, math
 from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -84,7 +84,7 @@ async def receive(token: str, request: Request, background: BackgroundTasks, db:
                 if symbol.endswith(q) and len(symbol) > len(q): symbol = f"{symbol[:-len(q)]}/{q}"; break
         assert SYMBOL.match(symbol)
         qty = float(d.get("qty", 1)); assert 0 < qty <= 1_000_000
-        px = float(d["price"]) if d.get("price") not in (None, "") else None; assert px is None or px > 0
+        px = float(d["price"]) if d.get("price") not in (None, "") else None; assert px is None or (math.isfinite(px) and px > 0)
         product = str(d.get("product", "MIS")).upper(); assert product in ("MIS", "CNC", "NRML")
     except Exception:
         raise HTTPException(422, 'Expected JSON like {"action": "buy|sell|close", "symbol": "TCS", "exchange": "NSE", "qty": 1}')
