@@ -6,6 +6,7 @@ from ..db import get_db
 from ..deps import current_user, owned_account
 from ..engine.rules import TEMPLATES, validate_spec
 from ..models import Strategy, User
+from ..brokers.factory import live_account_error
 from ..policy import live_allowed
 
 router = APIRouter(prefix="/api/strategies", tags=["strategies"])
@@ -79,6 +80,7 @@ def set_mode(sid: int, b: Mode, u: User = Depends(current_user), db: Session = D
         if not live_allowed(db): raise HTTPException(403, "Live trading needs login. Turn on login in Settings first.")
         if not b.account_id: raise HTTPException(400, "live mode needs a broker account_id")
         a = owned_account(db, u, b.account_id)
-        if a.kind == "paper" or not a.live_enabled: raise HTTPException(400, "that broker account is not enabled for live trading")
+        reason = live_account_error(a)
+        if reason: raise HTTPException(400, reason)
         s.account_id = a.id
     s.mode = b.mode; db.commit(); return _out(s)
