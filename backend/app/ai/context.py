@@ -38,11 +38,6 @@ def load_candles(db, user, symbol, exchange, interval, bars=300):
     tries = [("recorded", None), ("crypto", None)] if exchange == "CRYPTO" else [None]
     for t in tries:
         if t is None:
-            try:
-                src, client = resolve_data(db, user, exchange, "auto")
-                if src in ("openalgo",): return get_candles(symbol, exchange, interval, bars, src, client, db=db), src
-            except Exception:
-                pass
             continue
         try:
             df = get_candles(symbol, exchange, interval, bars, t[0], db=db)
