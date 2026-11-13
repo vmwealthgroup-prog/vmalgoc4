@@ -71,14 +71,15 @@ class Live(BaseModel):
 @router.patch("/accounts/{aid}/live")
 def live(aid: int, b: Live, u: User = Depends(current_user), db: Session = Depends(get_db)):
     a = owned_account(db, u, aid)
+    # Authenticate before revealing account eligibility or server policy details.
+    if not verify_password(b.password, u.password_hash): raise HTTPException(403, "Wrong password")
     if b.enabled and not live_allowed(db): raise HTTPException(403, "Live trading needs login. Turn on login in Settings first.")
-    if b.enabled:
-        reason = live_account_error(a)
-        if reason: raise HTTPException(400, reason)
-    if a.kind == "paper": raise HTTPException(400, "Paper accounts are always paper")
     if b.enabled and not get_settings().live_trading_enabled:
         raise HTTPException(400, "Live trading is switched off on this server (LIVE_TRADING_ENABLED=false)")
-    if not verify_password(b.password, u.password_hash): raise HTTPException(403, "Wrong password")
+    if a.kind == "paper": raise HTTPException(400, "Paper accounts are always paper")
+    if b.enabled:
+        reason = live_account_error(a, require_enabled=False)
+        if reason: raise HTTPException(400, reason)
     a.live_enabled = b.enabled; db.commit(); return _out(a)
 
 

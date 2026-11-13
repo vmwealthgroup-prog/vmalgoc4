@@ -9,15 +9,19 @@ from .kite import KiteAdapter, token_ok as kite_token_ok
 from .paper import PaperBroker
 
 
-def live_account_error(account: BrokerAccount) -> str | None:
-    """Return a fail-closed reason when an account is not eligible for automated live execution."""
+def live_account_error(account: BrokerAccount, *, require_enabled: bool = True) -> str | None:
+    """Return a fail-closed reason when an account is not eligible for automated live execution.
+
+    require_enabled=False is used only while an authenticated user is enabling an
+    otherwise eligible account; every execution path keeps the default True.
+    """
     if account.kind == "paper":
         return "live mode requires a supported broker account"
     if account.kind == "openalgo":
         return "OpenAlgo accounts are no longer supported; connect a supported broker directly"
     if account.kind == "kotak_neo":
         return "Kotak Neo automated execution is disabled until its live adapter is validated"
-    if not account.live_enabled:
+    if require_enabled and not account.live_enabled:
         return "live trading is not enabled for this broker account"
     try:
         creds = json.loads(decrypt(account.api_key_enc))
