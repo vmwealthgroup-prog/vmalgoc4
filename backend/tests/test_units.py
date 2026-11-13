@@ -117,6 +117,7 @@ def test_event_backtest_records_next_open_fills():
     df = frame([5, 5, 12, 14, 14, 8, 7])
     df.iloc[3, df.columns.get_loc("open")] = 13
     df.iloc[6, df.columns.get_loc("open")] = 9
+    df.iloc[6, df.columns.get_loc("high")] = 9
     result = run_backtest(df, _event_spec(exit_value=10), cost_bps=0)
     assert result["trades"][0]["entry"] == 13.0
     assert result["trades"][0]["exit"] == 9.0
