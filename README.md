@@ -83,13 +83,13 @@ Other hosts (Render, Railway, Fly): deploy `backend`, a second service running `
 (route `/api/auth/*` to the web app and the rest of `/api`, `/ws`, `/health` to the API).
 
 ## Day-to-day
-1. Morning: Brokers page, **Daily login** for Zerodha (or log in to your broker inside OpenAlgo). A reminder is sent if it is missing during market hours.
+1. Morning: Brokers page, **Daily login** for Zerodha. A reminder is sent if it is missing during market hours.
 2. Watch the dashboard health card or your alerts. Set up the watchdog so silence is noticed.
 3. After a kill-switch or breaker trip: review, then reset in Settings / re-enable the strategy.
 
 ## Configuration (see `.env.example`)
-`AUTH_REQUIRED`, `LIVE_TRADING_ENABLED`, `FEED_SOURCE` (demo / openalgo / crypto), `ENFORCE_MARKET_HOURS`, `MARKET_HOLIDAYS`, `SQUARE_OFF_TIME`, `MAX_ORDERS_PER_SECOND`,
-`BREAKER_DEFAULT_*`, `TELEGRAM_*` / `DISCORD_WEBHOOK_URL` / `NOTIFY_WEBHOOK_URL`, `OPENALGO_*`, `OPENALGO_ALLOWED_HOSTS` (set it when hosting for several users), `CHARGES_JSON`, `KITE_MARKET_PROTECTION`.
+`AUTH_REQUIRED`, `LIVE_TRADING_ENABLED`, `FEED_SOURCE` (demo / crypto), `ENFORCE_MARKET_HOURS`, `MARKET_HOLIDAYS`, `SQUARE_OFF_TIME`, `MAX_ORDERS_PER_SECOND`,
+`BREAKER_DEFAULT_*`, `TELEGRAM_*` / `DISCORD_WEBHOOK_URL` / `NOTIFY_WEBHOOK_URL`, `CHARGES_JSON`, `KITE_MARKET_PROTECTION`.
 
 ## Troubleshooting
 **`GET /api/app/config 404`, Register fails with 404, or the app says "Cannot reach the API".** The web app cannot find the API. Start it (`cd backend && uvicorn app.main:app --port 8000`).
@@ -112,7 +112,7 @@ cd backend && pip install pytest fakeredis && python -m pytest tests       # 117
 cd frontend && npx tsc --noEmit && npm run build
 ```
 **Verified in development:** the whole backend suite on SQLite and real PostgreSQL 16; migrations upgrade, match the models exactly (`alembic check`) and downgrade, on both;
-the OpenAlgo adapter against a real OpenAlgo server (error paths) and fake responses (parsing); the Zerodha adapter against a fake of the official client whose method signatures were checked
+the direct Zerodha adapter against a fake of the official client whose method signatures were checked
 against the installed library; strict TypeScript and production build from a clean checkout; end-to-end runs with real processes (open mode with no login, login switched on and off, WebSocket, paper automation, no duplicate orders).
 
 **NOT verified** (no broker account, Docker, browser or Redis server in the build environment, and no route to Coinbase or an AI key): the Coinbase WebSocket against the REAL service (it was tested against a local server built to Coinbase's documented message formats; the build sandbox could not reach Coinbase); real Claude replies (the request and every reply shape were tested with a mock; the exact model id depends on your account); live crypto orders on any real exchange (tested with a fake exchange); any real broker login, real order, or live market data; Zerodha's exact response fields on your account;
@@ -121,7 +121,7 @@ Paper-trade for weeks first. Charge rates and the holiday calendar are yours to 
 
 ## Known limits
 - Live crypto orders are spot **market** orders only, tested against a fake exchange, not a real one. Exchanges differ (minimum sizes, market-buy rules, test networks): start on the exchange's test network. Positions and P&L come from our own fill ledger, so orders placed outside VM Algo are not seen.
-- No direct Fyers adapter (use Fyers through OpenAlgo); Zerodha candles come via OpenAlgo/demo data (the direct adapter does orders, portfolio and funds).
+- No direct Fyers adapter is included. Zerodha's direct adapter supports orders, portfolio and funds; Indian-market historical candles are not supplied by this adapter.
 - The daily-loss guard uses the broker's day P&L; if a broker reports it differently, check the number against your broker app.
 - Paper fills use the latest tick, with no slippage. Backtests use a flat cost in bps.
 - Login throttling is per process; no 2FA or refresh tokens on VM Algo's own login. The API container runs with `--no-access-log` because the WebSocket token travels in the URL.
