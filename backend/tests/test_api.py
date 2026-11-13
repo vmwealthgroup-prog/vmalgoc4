@@ -87,10 +87,10 @@ def test_brokers_secure_storage(client, h):
     assert client.post("/api/brokers/accounts", headers=h, json={"label": "legacy", "broker_name": "zerodha", "host": "http://127.0.0.1:5000", "api_key": "SECRETKEY-12345"}).status_code == 405
     kite = client.post("/api/brokers/accounts/kite", headers=h, json={"label": "Z", "api_key": "K" * 20, "api_secret": "S" * 20})
     assert kite.status_code == 201 and kite.json()["has_key"]
+    uid = client.get("/api/me", headers=h).json()["id"]
     with SessionLocal() as db:
         raw = db.get(BrokerAccount, kite.json()["id"]).api_key_enc
-        user = db.query(User).first()
-        legacy = BrokerAccount(user_id=user.id, kind="openalgo", label="old gateway", broker_name="zerodha", host="http://127.0.0.1:5000", api_key_enc=encrypt("legacy-secret"))
+        legacy = BrokerAccount(user_id=uid, kind="openalgo", label="old gateway", broker_name="zerodha", host="http://127.0.0.1:5000", api_key_enc=encrypt("legacy-secret"))
         db.add(legacy); db.commit(); legacy_id = legacy.id
     assert "K" * 20 not in raw and "S" * 20 not in raw and len(raw) > 40
     listed = client.get("/api/brokers/accounts", headers=h).json()
