@@ -101,3 +101,81 @@ def test_redis_pubsub_with_fakeredis():
         t = asyncio.create_task(listen()); await asyncio.sleep(0.1); await ps.publish("ticks", {"symbol": "A", "ltp": 1}); await asyncio.wait_for(t, 3)
         assert got == [("ticks", {"symbol": "A", "ltp": 1})] and await ps.ping()
     asyncio.run(go())
+
+
+def _event_spec(entry_value=10, risk=None, exit_value=None):
+    spec = {"symbol": "X", "exchange": "NSE", "interval": "1d",
+            "entry": {"all": [{"left": {"ind": "close"}, "op": "crosses_above", "right": {"value": entry_value}}]}}
+    if exit_value is not None:
+        spec["exit"] = {"all": [{"left": {"ind": "close"}, "op": "crosses_below", "right": {"value": exit_value}}]}
+    if risk is not None:
+        spec["risk"] = risk
+    return spec
+
+
+def test_event_backtest_records_next_open_fills():
+    df = frame([5, 5, 12, 14, 14, 8, 7])
+    df.iloc[3, df.columns.get_loc("open")] = 13
+    df.iloc[6, df.columns.get_loc("open")] = 9
+    result = run_backtest(df, _event_spec(exit_value=10), cost_bps=0)
+    assert result["trades"][0]["entry"] == 13.0
+    assert result["trades"][0]["exit"] == 9.0
+    assert result["trades"][0]["exit_reason"] == "signal"
+
+
+def test_event_backtest_intrabar_stop_and_stop_first():
+    df = frame([9, 12, 12, 12])
+    df.iloc[2, df.columns.get_loc("low")] = 10.0
+    df.iloc[2, df.columns.get_loc("high")] = 15.0
+    result = run_backtest(df, _event_spec(risk={"stop_pct": 10, "take_pct": 10}), cost_bps=0)
+    assert result["trades"][0]["exit_reason"] == "stop"
+    assert result["trades"][0]["exit"] == pytest.approx(10.8)
+
+
+def test_event_backtest_gap_stop_fills_at_open():
+    df = frame([9, 12, 12, 8])
+    df.iloc[3, df.columns.get_loc("open")] = 8.0
+    result = run_backtest(df, _event_spec(risk={"stop_pct": 10}), cost_bps=0)
+    assert result["trades"][0]["exit"] == 8.0
+    assert result["trades"][0]["exit_reason"] == "stop"
+
+
+def test_event_backtest_charges_entry_and_exit_costs():
+    df = frame([9, 12, 13, 8, 8])
+    result = run_backtest(df, _event_spec(exit_value=10), cost_bps=10)
+    expected = (8.0 / 13.0 - 1.0) * 100.0 - 0.2
+    assert result["trades"][0]["pnl_pct"] == pytest.approx(expected)
+
+
+def test_event_backtest_reports_open_position_separately():
+    df = frame([9, 12, 13, 14])
+    result = run_backtest(df, _event_spec(), cost_bps=0)
+    assert result["metrics"]["trades"] == 0
+    assert result["open_position"]["entry"] == 13.0
+    assert result["metrics"]["open_position"] == result["open_position"]
+
+
+def test_event_backtest_does_not_reenter_on_persistent_signal():
+    df = frame([9, 12, 13, 12, 14, 15])
+    df.iloc[3, df.columns.get_loc("low")] = 10.0
+    spec = {"symbol": "X", "exchange": "NSE", "interval": "1d",
+            "entry": {"all": [{"left": {"ind": "close"}, "op": ">", "right": {"value": 10}}]},
+            "risk": {"stop_pct": 10}}
+    result = run_backtest(df, spec, cost_bps=0)
+    assert len(result["trades"]) == 1
+    assert result["open_position"] is None
+
+
+def test_event_backtest_rejects_invalid_ohlc_and_costs():
+    df = frame([9, 12, 13])
+    bad = df.copy()
+    bad.iloc[1, bad.columns.get_loc("high")] = 10
+    with pytest.raises(ValueError, match="invalid OHLC"):
+        run_backtest(bad, _event_spec())
+    with pytest.raises(ValueError, match="cost_bps"):
+        run_backtest(df, _event_spec(), cost_bps=float("nan"))
+
+
+def test_event_backtest_rejects_bad_curve_limit():
+    with pytest.raises(ValueError, match="max_points"):
+        run_backtest(frame([9, 12, 13]), _event_spec(), max_points=0)
