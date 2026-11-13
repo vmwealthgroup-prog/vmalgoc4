@@ -1,7 +1,6 @@
 import json
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from urllib.parse import urlparse
 import ccxt
 from fastapi import APIRouter, Depends, HTTPException
 import re
@@ -10,8 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from ..brokers import kite, kotak_neo_auth, kotak_neo_data
 from ..brokers.base import BrokerError
-from ..brokers.factory import SUPPORTED_BROKERS, ensure_paper_account, get_broker
-from ..config import get_settings
+from ..brokers.factory import ensure_paper_account, get_broker, live_account_error
 from ..db import get_db
 from ..deps import current_user, owned_account
 from ..models import BrokerAccount, User
@@ -40,42 +38,11 @@ def _out(a: BrokerAccount):
     return d
 
 
-def _check_host(host: str):
-    p = urlparse(host)
-    if p.scheme not in ("http", "https") or not p.hostname:
-        raise HTTPException(422, "host must be an http(s) URL, e.g. http://127.0.0.1:5000")
-    allowed = [h.strip() for h in get_settings().openalgo_allowed_hosts.split(",") if h.strip()]
-    if allowed and p.hostname not in allowed:
-        raise HTTPException(422, "that OpenAlgo host is not allowed on this server")
-
-
-@router.get("/supported")
-def supported(_: User = Depends(current_user), db: Session = Depends(get_db)):
-    return {"via": "OpenAlgo (self-hosted gateway)", "brokers": SUPPORTED_BROKERS, "live_trading_enabled_on_server": get_settings().live_trading_enabled,
-            "brokers_available": brokers_allowed(db), "live_available": live_allowed(db)}
-
 
 @router.get("/accounts")
 def accounts(u: User = Depends(current_user), db: Session = Depends(get_db)):
     ensure_paper_account(db, u); db.commit()
     return [_out(a) for a in db.scalars(select(BrokerAccount).where(BrokerAccount.user_id == u.id).order_by(BrokerAccount.id))]
-
-
-class AccountIn(BaseModel):
-    label: str = Field(min_length=1, max_length=80)
-    broker_name: str = Field(default="", max_length=40)
-    host: str = Field(max_length=255)
-    api_key: str = Field(min_length=8, max_length=300)
-
-
-@router.post("/accounts", status_code=201)
-def add(b: AccountIn, u: User = Depends(current_user), db: Session = Depends(get_db)):
-    if not brokers_allowed(db): raise HTTPException(403, "Broker connections need login on a hosted server. Turn on login in Settings.")
-    _check_host(b.host)
-    if b.broker_name and b.broker_name not in SUPPORTED_BROKERS:
-        raise HTTPException(422, "unknown broker name (see /api/brokers/supported)")
-    a = BrokerAccount(user_id=u.id, kind="openalgo", label=b.label, broker_name=b.broker_name, host=b.host.rstrip("/"), api_key_enc=encrypt(b.api_key))
-    db.add(a); db.commit(); return _out(a)
 
 
 @router.delete("/accounts/{aid}", status_code=204)
@@ -88,7 +55,7 @@ def delete(aid: int, u: User = Depends(current_user), db: Session = Depends(get_
 @router.post("/accounts/{aid}/test")
 def test(aid: int, u: User = Depends(current_user), db: Session = Depends(get_db)):
     a = owned_account(db, u, aid)
-    if a.kind == "openalgo": _check_host(a.host)
+    if a.kind == "openalgo": raise HTTPException(410, "OpenAlgo integration has been removed. This legacy account can only be deleted.")
     try:
         return {"ok": True, "funds": get_broker(db, a).funds()}
     except Exception as e:
@@ -104,10 +71,10 @@ class Live(BaseModel):
 def live(aid: int, b: Live, u: User = Depends(current_user), db: Session = Depends(get_db)):
     a = owned_account(db, u, aid)
     if b.enabled and not live_allowed(db): raise HTTPException(403, "Live trading needs login. Turn on login in Settings first.")
+    if b.enabled:
+        reason = live_account_error(a)
+        if reason: raise HTTPException(400, reason)
     if a.kind == "paper": raise HTTPException(400, "Paper accounts are always paper")
-    if a.kind == "kotak_neo": raise HTTPException(403, "Kotak Neo live execution is not enabled in this integration stage.")
-    if a.kind == "ccxt" and b.enabled and not json.loads(decrypt(a.api_key_enc)).get("trade"):
-        raise HTTPException(400, "This crypto account is read-only. Add it again with trading enabled to trade.")
     if b.enabled and not get_settings().live_trading_enabled:
         raise HTTPException(400, "Live trading is switched off on this server (LIVE_TRADING_ENABLED=false)")
     if not verify_password(b.password, u.password_hash): raise HTTPException(403, "Wrong password")
