@@ -34,7 +34,6 @@ def candle_facts(df: pd.DataFrame) -> dict:
 
 def load_candles(db, user, symbol, exchange, interval, bars=300):
     """Best real data first. CRYPTO: ticks recorded from the live feed, then the exchange's public candles, then synthetic demo data (flagged)."""
-    from ..routers.backtests import resolve_data
     tries = [("recorded", None), ("crypto", None)] if exchange == "CRYPTO" else [None]
     for t in tries:
         if t is None:
