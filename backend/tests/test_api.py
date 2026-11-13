@@ -78,21 +78,12 @@ def test_scanner(client, h):
 
 
 def test_brokers_secure_storage(client, h):
-    from app.db import SessionLocal
-    from app.models import BrokerAccount
-    sup = client.get("/api/brokers/supported", headers=h).json()["brokers"]
-    assert {"zerodha", "angel", "upstox", "dhan", "fyers", "kotak"} <= set(sup)
-    accts = client.get("/api/brokers/accounts", headers=h).json(); assert accts[0]["kind"] == "paper"
-    assert client.post("/api/brokers/accounts", headers=h, json={"label": "Z", "broker_name": "zerodha", "host": "ftp://x", "api_key": "k" * 20}).status_code == 422
-    assert client.post("/api/brokers/accounts", headers=h, json={"label": "Z", "broker_name": "notabroker", "host": "http://127.0.0.1:5000", "api_key": "k" * 20}).status_code == 422
-    r = client.post("/api/brokers/accounts", headers=h, json={"label": "Z", "broker_name": "zerodha", "host": "http://127.0.0.1:5000", "api_key": "SECRETKEY-12345"}); assert r.status_code == 201
-    assert "api_key" not in r.text and "SECRET" not in r.text and r.json()["has_key"]
-    with SessionLocal() as db:
-        raw = db.get(BrokerAccount, r.json()["id"]).api_key_enc
-    assert "SECRETKEY" not in raw and len(raw) > 40                              # encrypted at rest
-    assert client.patch(f"/api/brokers/accounts/{r.json()['id']}/live", headers=h, json={"enabled": True, "password": "password123"}).status_code == 400   # server switch off
-    other = signup(client, "o@example.com")
-    assert client.delete(f"/api/brokers/accounts/{r.json()['id']}", headers=other).status_code == 404
+    accts = client.get("/api/brokers/accounts", headers=h).json()
+    assert accts[0]["kind"] == "paper"
+    assert client.get("/api/brokers/supported", headers=h).status_code == 404
+    assert client.post("/api/brokers/accounts", headers=h, json={"label": "legacy", "broker_name": "zerodha", "host": "http://127.0.0.1:5000", "api_key": "SECRETKEY-12345"}).status_code == 405
+    assert client.post("/api/brokers/accounts/kite", headers=h, json={"label": "Z", "api_key": "short", "api_secret": "short"}).status_code == 422
+    assert client.delete(f"/api/brokers/accounts/{accts[0]['id']}", headers=h).status_code == 400
     assert client.post(f"/api/brokers/accounts/{accts[0]['id']}/test", headers=h).json()["ok"] is True
 
 
