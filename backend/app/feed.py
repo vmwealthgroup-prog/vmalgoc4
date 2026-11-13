@@ -1,4 +1,4 @@
-"""Tick feeder: publishes prices to pub/sub and the shared last-price cache. Sources: demo | openalgo | crypto."""
+"""Tick feeder: publishes prices to pub/sub and the shared last-price cache. Sources: demo | crypto."""
 import asyncio, json, random, time
 from .config import get_settings
 from .data import demo_candles
@@ -19,7 +19,7 @@ def parse_symbols(s: str):
 class Feeder:
     """Publishes prices to pub/sub and the last-price cache.
     - CRYPTO symbols with CRYPTO_FEED=coinbase: REAL ticks from Coinbase's public WebSocket (every trade becomes part of a 1-minute candle that is recorded)
-    - other symbols: demo (synthetic) or OpenAlgo quotes, polled"""
+    - other symbols: demo (synthetic); crypto tickers use CCXT when configured"""
     def __init__(self, pubsub, symbols=None, source=None, interval=1.0, crypto_feed=None, ws_connect=None):
         s = get_settings(); self.ps, self.interval = pubsub, interval
         every = symbols or parse_symbols(s.feed_symbols); self.source = source or s.feed_source; self.crypto_feed = crypto_feed or s.crypto_feed
@@ -40,15 +40,6 @@ class Feeder:
 
     def _fetch(self):
         s = get_settings(); out = {}
-        if self.source == "openalgo" and s.openalgo_api_key:
-            from openalgo import api
-            c = api(api_key=s.openalgo_api_key, host=s.openalgo_host)
-            for sym, ex in self.symbols:
-                if ex != "CRYPTO":
-                    try:
-                        d = c.quotes(symbol=sym, exchange=ex).get("data", {}); out[sym] = float(d["ltp"])
-                    except Exception:
-                        pass
         if self.source == "crypto" or any(ex == "CRYPTO" for _, ex in self.symbols) and self.source != "demo":
             import ccxt
             ex_ = getattr(ccxt, s.crypto_exchange)({"enableRateLimit": True})
