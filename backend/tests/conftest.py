@@ -2,7 +2,7 @@ import os, sys, pathlib
 DB = "/tmp/vmalgo_test.db"
 if os.path.exists(DB): os.remove(DB)
 os.environ.update(DATABASE_URL=os.environ.get("TEST_DATABASE_URL", f"sqlite:///{DB}"), FEED_IN_API="false", REDIS_URL="", SECRET_KEY="test-secret-key-test-secret-key-123456", ADMIN_EMAIL="boss@example.com",
-                  LIVE_TRADING_ENABLED="false", AUTH_REQUIRED="true", ENFORCE_MARKET_HOURS="false", CRYPTO_FEED="demo", MAX_ORDERS_PER_SECOND="50", ENV="development", OPENALGO_ALLOWED_HOSTS="")
+                  LIVE_TRADING_ENABLED="false", AUTH_REQUIRED="true", ENFORCE_MARKET_HOURS="false", CRYPTO_FEED="demo", MAX_ORDERS_PER_SECOND="50", ENV="development")
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 import pytest
 from fastapi.testclient import TestClient
