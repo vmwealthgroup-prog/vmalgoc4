@@ -37,6 +37,8 @@ def live_account_error(account: BrokerAccount) -> str | None:
 def get_broker(db, account: BrokerAccount) -> Broker:
     if account.kind == "paper":
         return PaperBroker(db, account)
+    if account.kind == "openalgo":
+        raise BrokerError("OpenAlgo integration has been removed; this legacy account can only be deleted")
     if account.kind in ("kite", "ccxt"):
         if not brokers_allowed(db):
             raise BrokerError("Broker connections need login on a hosted server. Turn on login in Settings.")
