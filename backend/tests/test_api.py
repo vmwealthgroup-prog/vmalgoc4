@@ -154,7 +154,6 @@ def test_runner_blocks_live_indian_strategy_without_real_candles(client, h, monk
     try:
         sid = client.post("/api/strategies", headers=h, json={"name": "live Indian safety", "spec": ALWAYS}).json()["id"]
         account = client.post("/api/brokers/accounts/kite", headers=h, json={"label": "Kite test", "api_key": "K" * 20, "api_secret": "S" * 20}).json()
-        uid = client.get("/api/me", headers=h).json()["id"]
         with SessionLocal() as db:
             a = db.get(BrokerAccount, account["id"])
             a.api_key_enc = encrypt(json.dumps({"api_key": "K" * 20, "api_secret": "S" * 20, "access_token": "test-token", "token_date": today()}))
