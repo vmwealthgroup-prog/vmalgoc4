@@ -2,40 +2,31 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from ..brokers.factory import get_broker
 from ..data import get_candles
 from ..db import get_db
 from ..deps import current_user
 from ..engine.backtest import run_backtest
 from ..engine.rules import validate_spec
-from ..models import Backtest, BrokerAccount, Strategy, User
+from ..models import Backtest, Strategy, User
 
 router = APIRouter(prefix="/api/backtests", tags=["backtests"])
 
 
 def resolve_data(db, user, exchange, source):
-    """-> (source, client). auto: the user's OpenAlgo account for Indian exchanges, ccxt for CRYPTO, else demo data."""
-    client = None
-    if source == "recorded":
-        return "recorded", None
-    if source in ("auto", "openalgo") and exchange != "CRYPTO":
-        a = db.scalar(select(BrokerAccount).where(BrokerAccount.user_id == user.id, BrokerAccount.kind == "openalgo"))
-        if a:
-            try:
-                client = get_broker(db, a).history_client()
-            except Exception:
-                if source == "openalgo": raise HTTPException(403, "Broker data needs login on a hosted server. Turn on login in Settings.")
-        elif source == "openalgo":
-            raise HTTPException(400, "Add an OpenAlgo broker account first")
+    """Resolve only recorded, demo, or public crypto candles. Indian-market auto uses demo research data."""
     if source == "auto":
-        source = "crypto" if exchange == "CRYPTO" else ("openalgo" if client else "demo")
-    return source, client
+        return ("crypto" if exchange == "CRYPTO" else "demo"), None
+    if source in ("recorded", "demo"):
+        return source, None
+    if source == "crypto" and exchange == "CRYPTO":
+        return source, None
+    raise HTTPException(400, "Unsupported data source")
 
 
 class BacktestIn(BaseModel):
     strategy_id: int | None = None
     spec: dict | None = None
-    source: str = "auto"                       # auto | demo | openalgo | crypto
+    source: str = "auto"                       # auto | recorded | demo | crypto
     bars: int = Field(default=1000, ge=60, le=5000)
     cost_bps: float = Field(default=5.0, ge=0, le=200)
 
