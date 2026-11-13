@@ -5,29 +5,44 @@ from ..policy import brokers_allowed
 from .base import Broker, BrokerError
 import json
 from .crypto import CcxtAdapter
-from .kite import KiteAdapter
-from .openalgo import OpenAlgoAdapter
+from .kite import KiteAdapter, token_ok as kite_token_ok
 from .paper import PaperBroker
 
-# Informational: brokers supported by OpenAlgo (from its VALID_BROKERS list). Availability depends on your OpenAlgo setup.
-SUPPORTED_BROKERS = ("zerodha angel upstox dhan fyers kotak fivepaisa fivepaisaxts aliceblue arrow compositedge definedge deltaexchange firstock "
-                     "flattrade groww hdfcsecurities hdfcsky ibulls iifl iiflcapital indmoney jainamxts motilal mstock nubra paytm pocketful "
-                     "rmoney rupeezy samco shoonya tradejini tradesmart wisdom zebu dhan_sandbox").split()
+
+def live_account_error(account: BrokerAccount) -> str | None:
+    """Return a fail-closed reason when an account is not eligible for automated live execution."""
+    if account.kind == "paper":
+        return "live mode requires a supported broker account"
+    if account.kind == "openalgo":
+        return "OpenAlgo accounts are no longer supported; connect a supported broker directly"
+    if account.kind == "kotak_neo":
+        return "Kotak Neo automated execution is disabled until its live adapter is validated"
+    if not account.live_enabled:
+        return "live trading is not enabled for this broker account"
+    try:
+        creds = json.loads(decrypt(account.api_key_enc))
+    except Exception:
+        return "broker credentials could not be decrypted or are invalid"
+    if account.kind == "kite":
+        if not kite_token_ok(creds):
+            return "Zerodha session is missing or expired; complete today's broker login"
+        return None
+    if account.kind == "ccxt":
+        if creds.get("trade") is not True:
+            return "crypto account is read-only; explicit trading permission is required"
+        return None
+    return f"automated live trading is not supported for account kind: {account.kind}"
 
 
 def get_broker(db, account: BrokerAccount) -> Broker:
     if account.kind == "paper":
         return PaperBroker(db, account)
-    if account.kind == "openalgo":
-        if not brokers_allowed(db):
-            raise BrokerError("Broker connections need login on a hosted server. Turn on login in Settings.")
-        return OpenAlgoAdapter(account.host, decrypt(account.api_key_enc))
     if account.kind in ("kite", "ccxt"):
         if not brokers_allowed(db):
             raise BrokerError("Broker connections need login on a hosted server. Turn on login in Settings.")
         creds = json.loads(decrypt(account.api_key_enc))
         return KiteAdapter(creds) if account.kind == "kite" else CcxtAdapter(creds, db=db, account_id=account.id)
-    raise ValueError(f"unknown account kind {account.kind}")
+    raise ValueError(f"unsupported account kind {account.kind}")
 
 
 def ensure_paper_account(db, user: User) -> BrokerAccount:
