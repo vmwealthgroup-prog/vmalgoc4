@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from ..brokers import kite, kotak_neo_auth, kotak_neo_data
 from ..brokers.base import BrokerError
 from ..brokers.factory import ensure_paper_account, get_broker, live_account_error
+from ..config import get_settings
 from ..db import get_db
 from ..deps import current_user, owned_account
 from ..models import BrokerAccount, User
