@@ -56,7 +56,7 @@ def run_strategy(db, st: Strategy) -> list[dict]:
         broker = get_broker(db, acct)
         if live:
             # Live crypto only: use public exchange OHLCV, never demo or an unverified broker-history fallback.
-            df = get_candles(sym, exch, spec["interval"], 300, "crypto")
+            df = get_candles(sym, exch, spec["interval"], 300, "crypto", exchange_id=acct.broker_name)
         else:
             df = get_candles(sym, exch, spec["interval"], 300, "auto")
     except Exception as exc:
