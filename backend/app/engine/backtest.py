@@ -21,7 +21,7 @@ def _finite_nonnegative(value, name):
     except (TypeError, ValueError) as exc:
         raise ValueError(f"{name} must be a finite non-negative number") from exc
     if not math.isfinite(number) or number < 0:
-        raise ValueError(f"{name} must be a finite non-negative number") from exc
+        raise ValueError(f"{name} must be a finite non-negative number")
     return number
 
 
@@ -143,7 +143,7 @@ def run_backtest(df: pd.DataFrame, spec: dict, cost_bps: float = 5.0,
 
         if pending == "exit" and position is not None:
             close_position(ts, open_price, "signal")
-        elif pending == "entry" and position is None and entry_armed:
+        elif pending == "entry" and position is None:
             charge_fee()
             position = {
                 "side": sign, "entry": float(open_price),
