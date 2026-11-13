@@ -14,6 +14,7 @@ from .brokers.kite import today as kite_today, token_ok as kite_token_ok
 from .models import AppSetting, BrokerAccount, Order, Strategy, User
 from .security import decrypt
 from .trading import now_ist, submit_order
+from .policy import live_allowed
 
 
 def _event(user_id, st, o: Order):
@@ -42,7 +43,7 @@ def run_strategy(db, st: Strategy) -> list[dict]:
     if live:
         if not s.live_trading_enabled:
             return [_safety_event(user, st, "Live trading is disabled on this server (LIVE_TRADING_ENABLED=false).")]
-        if not market.live_allowed(db):
+        if not live_allowed(db):
             return [_safety_event(user, st, "Live trading requires login to be enabled in Settings.")]
         account_reason = live_account_error(acct)
         if account_reason:
