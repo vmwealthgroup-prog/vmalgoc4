@@ -8,8 +8,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from .. import notify, quotes
-from ..brokers.factory import ensure_paper_account, get_broker
+from ..brokers.factory import ensure_paper_account, get_broker, live_account_error
 from ..data import demo_candles
+from ..config import get_settings
 from ..db import get_db
 from ..deps import current_user, owned_account
 from ..models import User, Webhook
@@ -47,7 +48,10 @@ def create_hook(b: HookIn, u: User = Depends(current_user), db: Session = Depend
     if b.mode == "live":
         if not live_allowed(db): raise HTTPException(403, "Live webhooks need login. Turn on login in Settings first.")
         a = owned_account(db, u, b.account_id) if b.account_id else None
-        if a is None or a.kind == "paper" or not a.live_enabled: raise HTTPException(400, "A live webhook needs a broker account with live trading enabled")
+        if a is None: raise HTTPException(400, "A live webhook needs a broker account")
+        reason = live_account_error(a)
+        if reason: raise HTTPException(400, reason)
+        if not get_settings().live_trading_enabled: raise HTTPException(403, "Live trading is disabled on this server")
     token = secrets.token_urlsafe(32)
     w = Webhook(user_id=u.id, name=b.name, token_hash=_hash(token), mode=b.mode, account_id=b.account_id if b.mode == "live" else None)
     db.add(w); db.commit()
@@ -90,7 +94,19 @@ async def receive(token: str, request: Request, background: BackgroundTasks, db:
         broker = get_broker(db, acct)
     except Exception as e:
         db.commit(); return {"status": "failed", "message": str(e)[:200]}
-    price = px or quotes.get_last(symbol) or float(demo_candles(symbol, "5m", 5)["close"].iloc[-1])
+    if w.mode == "live":
+        if px is None:
+            try:
+                live_quote = broker.quote(symbol, exchange)
+                px = float(live_quote.get("ltp") or 0)
+            except Exception:
+                px = 0
+        if not px or px <= 0:
+            db.commit()
+            raise HTTPException(422, "Live webhook requires a valid alert price or verified broker quote; demo prices are never used")
+        price = px
+    else:
+        price = px or quotes.get_last(symbol) or float(demo_candles(symbol, "5m", 5)["close"].iloc[-1])
     side = action
     if action == "CLOSE":
         pos = next((p["qty"] for p in broker.positions() if p["symbol"] == symbol and p["exchange"] == exchange), 0.0)
