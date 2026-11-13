@@ -141,6 +141,35 @@ def test_live_is_hard_blocked_on_server(client, h):
         assert o.status == "blocked" and "disabled on this server" in o.message
 
 
+def test_runner_blocks_live_indian_strategy_without_real_candles(client, h, monkeypatch):
+    import json
+    from app.brokers.kite import today
+    from app.config import get_settings
+    from app.db import SessionLocal
+    from app.models import BrokerAccount, Order
+    from app.runner import run_once
+    from app.security import encrypt
+    monkeypatch.setenv("LIVE_TRADING_ENABLED", "true")
+    get_settings.cache_clear()
+    try:
+        sid = client.post("/api/strategies", headers=h, json={"name": "live Indian safety", "spec": ALWAYS}).json()["id"]
+        account = client.post("/api/brokers/accounts/kite", headers=h, json={"label": "Kite test", "api_key": "K" * 20, "api_secret": "S" * 20}).json()
+        uid = client.get("/api/me", headers=h).json()["id"]
+        with SessionLocal() as db:
+            a = db.get(BrokerAccount, account["id"])
+            a.api_key_enc = encrypt(json.dumps({"api_key": "K" * 20, "api_secret": "S" * 20, "access_token": "test-token", "token_date": today()}))
+            a.live_enabled = True
+            db.commit()
+        mode = client.patch(f"/api/strategies/{sid}/mode", headers=h, json={"mode": "live", "account_id": account["id"]})
+        assert mode.status_code == 200, mode.text
+        with SessionLocal() as db:
+            events = run_once(db)
+            assert any(e["type"] == "safety_block" and "no validated real Indian-market candle provider" in e["message"] for e in events)
+            assert db.query(Order).filter(Order.strategy_id == sid).count() == 0
+    finally:
+        monkeypatch.undo()
+        get_settings.cache_clear()
+
 def test_runner_trades_paper_without_duplicates(client, h):
     from app.db import SessionLocal
     from app.runner import run_once
