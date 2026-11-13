@@ -79,7 +79,7 @@ def test_scanner(client, h):
 
 def test_brokers_secure_storage(client, h):
     from app.db import SessionLocal
-    from app.models import BrokerAccount, User
+    from app.models import BrokerAccount
     from app.security import encrypt
     accts = client.get("/api/brokers/accounts", headers=h).json()
     assert accts[0]["kind"] == "paper"
