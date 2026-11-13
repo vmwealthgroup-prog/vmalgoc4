@@ -6,10 +6,10 @@ Licences below were read from each repository's own LICENSE file on the date thi
 |---|---|---|---|---|
 | zerodha/pykiteconnect | Official Zerodha Kite Connect Python client | MIT | **ADOPTED** | Dependency `kiteconnect` (PyPI, MIT, v5.2.2). Powers the direct Zerodha adapter and its daily-login flow. Method signatures were checked against the installed package. |
 | ccxt/ccxt | Unified crypto exchange library | MIT | **ADOPTED** | Dependency. Crypto candles and prices, and exchange accounts (balances; spot market orders when trading is enabled). |
-| marketcalls/openalgo | Self-hosted broker gateway (37 Indian brokers) | AGPL-3.0 | **ADOPTED (as a separate service)** | Reached over HTTP with the MIT `openalgo` SDK. AGPL-3.0 applies to OpenAlgo itself: run it unmodified as its own service; none of its code is in this repo. |
+| marketcalls/openalgo | Self-hosted broker gateway | AGPL-3.0 | **EVALUATED, REMOVED** | Was previously integrated as a separate service; removed from the active VM Algo runtime. No active dependency or adapter remains. |
 | dhruv7539/zerodha-trading-bot | Multi-strategy Zerodha bot (paper/live, risk limits, systemd) | MIT | **IDEAS ONLY** | Read for design. Re-implemented from scratch: Indian charge model, strategy circuit breaker, heartbeat + watchdog, alerts, systemd units. No code copied. |
 | fabston/TradingView-Webhook-Bot | TradingView alerts forwarded to chat apps | MIT | **IDEA ONLY** | VM Algo has its own webhook receiver (alert -> risk-gated order) and its own Telegram/Discord notifier. |
-| alwin48/fyers-trading-bot | Modular Fyers intraday bot | MIT | **REFERENCE ONLY** | Not integrated. Fyers is supported through OpenAlgo. |
+| alwin48/fyers-trading-bot | Modular Fyers intraday bot | MIT | **REFERENCE ONLY** | Not integrated. No direct Fyers adapter is included. |
 | ivopetiz/algotrading | Older crypto strategy examples | MIT | **REFERENCE ONLY** | Not integrated (crypto, not maintained recently). |
 | CryptoGnome/Tradingview-Webhook-Bot | TradingView alerts to crypto trades | NO LICENSE FILE | **NOT USED** | No licence file: all rights reserved, so it cannot legally be reused. VM Algo's own TradingView receiver places crypto orders through ccxt instead (see README). |
 | FyersDev/fyers-api-sample-code | Fyers sample code | NO LICENSE FILE | **NOT USED** | No licence file. A direct Fyers adapter was not built (see README); use Fyers through OpenAlgo. |
