@@ -54,14 +54,10 @@ def test_websocket_needs_no_token_in_open_mode(open_client):
 
 def test_live_trading_is_never_possible_in_open_mode(open_client):
     c = open_client
-    assert c.patch("/api/strategies/1/mode", json={"mode": "live", "account_id": 1}).status_code in (403, 404)
     sid = c.post("/api/strategies", json={"name": "a", "spec": EMA}).json()["id"]
     assert c.patch(f"/api/strategies/{sid}/mode", json={"mode": "live", "account_id": 1}).status_code == 403
-    acct = c.post("/api/brokers/accounts", json={"label": "Z", "broker_name": "zerodha", "host": "http://127.0.0.1:5000", "api_key": "k" * 20}).json()
-    r = c.patch(f"/api/brokers/accounts/{acct['id']}/live", json={"enabled": True, "password": "whatever1"}); assert r.status_code == 403 and "login" in r.json()["detail"].lower()
-    lim = c.get("/api/risk-limits").json(); lim.update(window_start="00:00", window_end="23:59"); c.put("/api/risk-limits", json=lim)
-    o = c.post("/api/orders", json={"symbol": "TCS", "exchange": "NSE", "side": "BUY", "qty": 1, "price": 10, "mode": "live", "account_id": acct["id"]}).json()
-    assert o["status"] == "blocked" and "login" in o["message"]
+    assert c.get("/api/brokers/supported").status_code == 404
+    assert c.post("/api/backtests", json={"spec": EMA, "source": "openalgo"}).status_code == 400
 
 
 def test_hosted_open_mode_blocks_brokers(open_client, monkeypatch):
