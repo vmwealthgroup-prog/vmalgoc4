@@ -8,7 +8,7 @@ import { Button, Card, Field, Input, Notice, Select } from "@/components/ui";
 const QUICK = ["What is the trend right now?", "What are the risks at the moment?", "Give me a strategy idea I can backtest"];
 const SOURCE: Record<string, { t: string; k: "ok" | "warn" | "info" }> = {
   recorded: { t: "REAL ticks recorded from the live feed", k: "ok" }, crypto: { t: "REAL candles from the exchange", k: "ok" },
-  openalgo: { t: "REAL candles from your broker", k: "ok" }, demo: { t: "SIMULATED data: no live source was available", k: "warn" },
+  demo: { t: "SIMULATED data: no live source was available", k: "warn" },
 };
 
 export default function AiAnalyst() {
