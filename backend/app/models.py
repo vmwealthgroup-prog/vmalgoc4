@@ -23,7 +23,7 @@ class BrokerAccount(Base):
     __tablename__ = "broker_accounts"
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    kind: Mapped[str] = mapped_column(String(20))                          # paper | openalgo
+    kind: Mapped[str] = mapped_column(String(20))                          # paper | legacy openalgo | kite | ccxt | kotak_neo
     label: Mapped[str] = mapped_column(String(80))
     broker_name: Mapped[str] = mapped_column(String(40), default="")       # informational: zerodha, angel, ...
     host: Mapped[str] = mapped_column(String(255), default="")
