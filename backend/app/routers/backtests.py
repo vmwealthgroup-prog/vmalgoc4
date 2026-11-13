@@ -41,7 +41,14 @@ class BacktestIn(BaseModel):
 
 
 def _summary(b: Backtest):
-    return {"id": b.id, "name": b.name, "strategy_id": b.strategy_id, "metrics": b.metrics, "created_at": b.created_at.isoformat()}
+    return {
+        "id": b.id,
+        "name": b.name,
+        "strategy_id": b.strategy_id,
+        "metrics": b.metrics,
+        "open_position": b.metrics.get("open_position") if isinstance(b.metrics, dict) else None,
+        "created_at": b.created_at.isoformat(),
+    }
 
 
 @router.post("", status_code=201)
@@ -64,7 +71,8 @@ def run(b: BacktestIn, u: User = Depends(current_user), db: Session = Depends(ge
     except Exception as e:
         raise HTTPException(422, f"Backtest failed: {e}")
     row = Backtest(user_id=u.id, strategy_id=b.strategy_id, name=name, params={"spec": spec, "source": source, "bars": b.bars, "cost_bps": b.cost_bps},
-                   metrics={**res["metrics"], "data_source": source}, equity=res["equity"], trades=res["trades"])
+                   metrics={**res["metrics"], "data_source": source, "open_position": res["open_position"]},
+                   equity=res["equity"], trades=res["trades"])
     db.add(row); db.commit()
     return {**_summary(row), "params": row.params, "equity": row.equity, "trades": row.trades}
 
