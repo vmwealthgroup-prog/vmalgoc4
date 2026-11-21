@@ -10,11 +10,13 @@ class Settings(BaseSettings):
     secret_key: str = "dev-secret-change-me"       # JWT signing
     encryption_key: str = ""                       # Fernet key for broker API keys (required in production)
     access_token_minutes: int = 60 * 12
-    cors_origins: str = "http://localhost:3000"
+    # Keep this list explicit: include the deployed frontend origin and localhost for development.
+    # Override CORS_ORIGINS in the hosting environment for any additional/custom frontend domains.
+    cors_origins: str = "http://localhost:3000,https://vmalgoc4-henna.vercel.app"
     allow_registration: bool = True
     auth_required: bool = False                    # default access mode: False = open (no login), True = login required. Changeable inside the app.
     admin_email: str = ""                          # this email becomes admin on registration
-    live_trading_enabled: bool = False             # global hard switch. Live orders are impossible while false.
+    live_trading_enabled: bool = False             # live orders are impossible while false.
     runner_enabled: bool = True
     runner_interval_s: int = 30
     feed_source: str = "demo"                      # demo | crypto
